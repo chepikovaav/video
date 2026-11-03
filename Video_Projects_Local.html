@@ -26,7 +26,7 @@
 .ai-status{margin:0;overflow-wrap:anywhere}.ai-status:empty{display:none}.ai-status.busy::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:#7f9b3c;margin-right:7px;animation:aipulse .9s infinite alternate}
 @keyframes aipulse{to{opacity:.2}}
 .ai-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}.ai-grid .wide{grid-column:1/-1}.ai-grid h3{font-size:13px;margin:8px 0 0}
-.ai-check{display:flex!important;gap:8px;align-items:center;font-weight:500!important;margin:4px 0!important}
+.ai-custom{margin-top:6px}.ai-check{display:flex!important;gap:8px;align-items:center;font-weight:500!important;margin:4px 0!important}
 .ai-ref{display:flex;gap:14px;align-items:center}.ai-ref img{width:110px;height:74px;object-fit:contain;border:1px solid var(--line);border-radius:7px;background:#fff;flex:none}.ai-ref p{margin:2px 0 8px}
 #aiPanel .section-head{margin-top:0}
 @media(max-width:1100px){.aibox{grid-template-columns:1fr}.ai-grid{grid-template-columns:1fr 1fr}}
@@ -54,14 +54,14 @@
 <details class="help" id="aiSettingsBox"><summary>Ключи API и параметры генерации</summary>
 <div class="ai-grid"><h3 class="wide">OpenAI · кадры</h3>
 <div><label for="aiOpenaiKey">OpenAI API key</label><input id="aiOpenaiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"></div>
-<div><label for="aiImageModel">Модель</label><input id="aiImageModel" list="aiImageModels" autocomplete="off"><datalist id="aiImageModels"><option value="gpt-image-2"><option value="gpt-image-1.5"><option value="gpt-image-1"><option value="gpt-image-1-mini"></datalist></div>
+<div><label for="aiImageModel">Модель</label><select id="aiImageModel"><option value="gpt-image-2">GPT Image 2 — новейшая, лучшее качество</option><option value="gpt-image-1.5">GPT Image 1.5</option><option value="gpt-image-1">GPT Image 1</option><option value="gpt-image-1-mini">GPT Image 1 mini — дешевле</option><option value="__custom">Другая — ввести ID…</option></select><input id="aiImageModelCustom" class="ai-custom" autocomplete="off" spellcheck="false" placeholder="ID модели OpenAI" hidden></div>
 <div><label for="aiImageSize">Размер</label><input id="aiImageSize" list="aiImageSizes" autocomplete="off"><datalist id="aiImageSizes"><option value="1536x1024"><option value="1024x1024"><option value="1024x1536"><option value="auto"></datalist></div>
 <div><label for="aiImageQuality">Качество</label><select id="aiImageQuality"><option value="high">high — финальные кадры</option><option value="medium">medium</option><option value="low">low — дёшево, черновик</option><option value="auto">auto</option></select></div>
 <div class="wide"><label class="ai-check"><input type="checkbox" id="aiNoText">Без надписей в кадре, нижняя треть свободна под титры</label></div>
 <h3 class="wide">Seedance · видео из кадра</h3>
 <div><label for="aiArkKey">ModelArk API key</label><input id="aiArkKey" type="password" autocomplete="off" spellcheck="false"></div>
 <div><label for="aiArkBase">Платформа</label><select id="aiArkBase"><option value="https://ark.ap-southeast.bytepluses.com/api/v3">BytePlus ModelArk (международная)</option><option value="https://ark.cn-beijing.volces.com/api/v3">Volcengine Ark (Китай)</option></select></div>
-<div><label for="aiVideoModel">Model ID</label><input id="aiVideoModel" list="aiVideoModels" autocomplete="off"><datalist id="aiVideoModels"><option value="seedance-1-5-pro-251215"><option value="dreamina-seedance-2-0-260128"><option value="seedance-1-0-pro-250528"><option value="seedance-1-0-pro-fast-251015"><option value="seedance-1-0-lite-i2v-250428"><option value="doubao-seedance-1-5-pro-251215"><option value="doubao-seedance-1-0-pro-250528"></datalist></div>
+<div><label for="aiVideoModel">Модель Seedance</label><select id="aiVideoModel"><optgroup label="BytePlus ModelArk"><option value="dreamina-seedance-2-0-260128">Seedance 2.0 · dreamina-seedance-2-0-260128</option><option value="seedance-1-5-pro-251215">Seedance 1.5 Pro · seedance-1-5-pro-251215</option><option value="seedance-1-0-pro-250528">Seedance 1.0 Pro · seedance-1-0-pro-250528</option><option value="seedance-1-0-pro-fast-251015">Seedance 1.0 Pro Fast — быстрее, дешевле · seedance-1-0-pro-fast-251015</option><option value="seedance-1-0-lite-i2v-250428">Seedance 1.0 Lite I2V · seedance-1-0-lite-i2v-250428</option></optgroup><optgroup label="Volcengine Ark"><option value="doubao-seedance-2-0-260128">Seedance 2.0 · doubao-seedance-2-0-260128</option><option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro · doubao-seedance-1-5-pro-251215</option><option value="doubao-seedance-1-0-pro-250528">Seedance 1.0 Pro · doubao-seedance-1-0-pro-250528</option><option value="doubao-seedance-1-0-pro-fast-251015">Seedance 1.0 Pro Fast — быстрее, дешевле · doubao-seedance-1-0-pro-fast-251015</option><option value="doubao-seedance-1-0-lite-i2v-250428">Seedance 1.0 Lite I2V · doubao-seedance-1-0-lite-i2v-250428</option></optgroup><option value="__custom">Другая — ввести Model ID…</option></select><input id="aiVideoModelCustom" class="ai-custom" autocomplete="off" spellcheck="false" placeholder="Model ID из консоли ModelArk" hidden></div>
 <div><label for="aiResolution">Разрешение</label><select id="aiResolution"><option>1080p</option><option>720p</option><option>480p</option></select></div>
 <div><label for="aiRatio">Соотношение</label><select id="aiRatio"><option>16:9</option><option>9:16</option><option>1:1</option><option>4:3</option><option>3:4</option><option>21:9</option><option value="adaptive">adaptive — как у кадра</option></select></div>
 <div><label for="aiDuration">Длительность, с</label><input id="aiDuration" type="number" min="2" max="15" step="1"></div>
@@ -1232,12 +1232,28 @@ $('aiClean').addEventListener('click',async()=>{
   setStatus('Удалено неиспользуемых файлов: '+n+'.');
  }catch(e){setStatus(e.message,true);}
 });
-const aiFields={aiOpenaiKey:'openaiKey',aiImageModel:'imageModel',aiImageSize:'imageSize',aiImageQuality:'imageQuality',aiNoText:'noText',aiArkKey:'arkKey',aiArkBase:'arkBase',aiVideoModel:'videoModel',aiResolution:'resolution',aiRatio:'ratio',aiDuration:'duration',aiChain:'chain',aiCameraFixed:'cameraFixed',aiAudio:'audio',aiWatermark:'watermark',aiLegacy:'legacyFlags'};
+const aiFields={aiOpenaiKey:'openaiKey',aiImageSize:'imageSize',aiImageQuality:'imageQuality',aiNoText:'noText',aiArkKey:'arkKey',aiArkBase:'arkBase',aiResolution:'resolution',aiRatio:'ratio',aiDuration:'duration',aiChain:'chain',aiCameraFixed:'cameraFixed',aiAudio:'audio',aiWatermark:'watermark',aiLegacy:'legacyFlags'};
 for(const [id,k] of Object.entries(aiFields)){const el=$(id);
  if(el.type==='checkbox')el.checked=!!aiSettings[k];else el.value=aiSettings[k];
  el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',()=>{aiSettings[k]=el.type==='checkbox'?el.checked:el.type==='number'?Number(el.value):el.value;saveAISettings();});
 }
 if(![...$('aiArkBase').options].some(o=>o.value===aiSettings.arkBase)){const o=document.createElement('option');o.value=o.textContent=aiSettings.arkBase;$('aiArkBase').append(o);$('aiArkBase').value=aiSettings.arkBase;}
+function bindModel(selId,customId,key){
+ const sel=$(selId),inp=$(customId);
+ const sync=()=>{const v=aiSettings[key]||'',known=v&&v!=='__custom'&&[...sel.options].some(o=>o.value===v);sel.value=known?v:'__custom';inp.hidden=!!known;if(!known)inp.value=v;};
+ sync();
+ sel.addEventListener('change',()=>{if(sel.value==='__custom'){inp.hidden=false;inp.value='';aiSettings[key]='';inp.focus();}else{inp.hidden=true;aiSettings[key]=sel.value;}saveAISettings();});
+ inp.addEventListener('input',()=>{aiSettings[key]=inp.value.trim();saveAISettings();});
+ return sync;
+}
+bindModel('aiImageModel','aiImageModelCustom','imageModel');
+const syncVideoModel=bindModel('aiVideoModel','aiVideoModelCustom','videoModel');
+// Model IDs differ by platform: BytePlus "seedance-…"/"dreamina-seedance-2…", Volcengine "doubao-seedance-…".
+$('aiArkBase').addEventListener('change',()=>{
+ const volc=/volces\.com/.test(aiSettings.arkBase),m=aiSettings.videoModel||'',core=m.replace(/^(doubao|dreamina)-/,'');
+ const next=volc?'doubao-'+core:(/^seedance-2/.test(core)?'dreamina-':'')+core;
+ if(next!==m&&[...$('aiVideoModel').options].some(o=>o.value===next)){aiSettings.videoModel=next;saveAISettings();syncVideoModel();}
+});
 $('aiCheck').addEventListener('click',async()=>{const p=await checkProxy();setStatus(p?'AI-сервер найден: запросы пойдут через него.':'AI-сервер не найден: запросы пойдут напрямую из браузера.');});
 if(!aiSettings.openaiKey||!aiSettings.arkKey)$('aiSettingsBox').open=true;
 checkProxy();
