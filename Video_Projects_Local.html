@@ -64,6 +64,7 @@
 .section-head .step-num{margin-right:4px}.section-head>div:first-child{display:flex;gap:10px;align-items:flex-start}
 .scene-tools{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
 #keysNotice .button-row{margin-top:8px}
+.key-field label{color:var(--warn)}.key-field input,.key-field textarea{border-color:#d9b46a;background:#fffbf0}
 .ledger{font:11px/1.6 ui-monospace,Menlo,monospace;background:#f5f7f2;border-radius:8px;padding:10px 12px;max-height:260px;overflow:auto;white-space:pre-wrap;margin:10px 0 0}
 .vid-cost{font-size:11.5px;color:var(--ink);background:#f1f5ea;border-radius:6px;padding:5px 8px;margin:0}.vid-cost:empty{display:none}
 #arkBalance:empty{display:none}#arkBalance.low,#arkBalanceSettings.low{background:#fde7e0;color:#a3392d;border-color:#efc4b6}
@@ -86,11 +87,11 @@
 <section class="panel step" id="stepInput" aria-labelledby="stepInputTitle"><div class="step-head"><span class="step-num">1</span><div><h2 id="stepInputTitle">Данные ролика</h2><p class="muted">Скрипт, фото продукта и, если есть, референс окружения. Потом — «Начать».</p></div></div>
 <div class="field"><label for="bulk">Скрипт</label><div class="bulk-head"><p class="muted">Пустая строка разделяет сцены. Ручные выделения титров: <code>*важные слова*</code>.</p><select id="separator" aria-label="Разделитель сцен"><option value="auto">Сцены: определить автоматически</option><option value="paragraphs">Пустая строка между сценами</option><option value="lines">Каждая строка — новая сцена</option><option value="numbered">Нумерация 1. / 2. / 3.</option></select></div><textarea id="bulk" spellcheck="false" placeholder="Вставь текст ролика. Между сценами оставь пустую строку."></textarea><div class="import-options"><label><input type="checkbox" id="autoHighlight" checked>Подобрать выделения</label><label><input type="checkbox" id="autoWrap" checked>Разбить длинный блок на две строки</label></div><p class="muted" id="bulkHint"></p></div>
 <div class="field"><label>Фото продукта <span class="muted" id="photoCount"></span></label><div class="dropzone" id="photoDrop" tabindex="0" role="button" aria-label="Добавить фото продукта"><div class="thumbs" id="photoThumbs"></div><p id="photoHint"></p></div><input type="file" id="photoFile" accept="image/*" multiple hidden></div>
-<div class="field"><label>Референс окружения <span class="muted">необязательно — как продукт выглядит в реальной обстановке</span></label><div class="dropzone" id="envDrop" tabindex="0" role="button" aria-label="Добавить референс окружения"><div class="thumbs" id="envThumbs"></div><p id="envHint"></p></div><input type="file" id="envFile" accept="image/*" hidden></div>
+<div class="field"><label>Референсы окружения <span class="muted">необязательно, до 10 — как продукт выглядит в реальной обстановке</span> <span class="muted" id="envCount"></span></label><div class="dropzone" id="envDrop" tabindex="0" role="button" aria-label="Добавить референсы окружения"><div class="thumbs" id="envThumbs"></div><p id="envHint"></p></div><input type="file" id="envFile" accept="image/*" multiple hidden></div>
 <div class="button-row start-row"><button type="button" id="aiStart" class="primary big">Начать</button><button type="button" id="aiStop" class="small" hidden>Остановить</button><button id="apply" type="button" class="small" title="Без анализа и генерации картинок">Только разбить на сцены</button><span id="bulkStatus" class="muted" role="status"></span></div>
 <ol class="pipeline" id="pipeline" hidden><li data-step="analyze">Анализ продукта по фото</li><li data-step="split">Разбивка скрипта на сцены</li><li data-step="plan">Решение по сценам: человек с продуктом или продукт в окружении</li><li data-step="images">Генерация картинок</li></ol><p class="muted" id="pipeStatus" role="status" aria-live="polite"></p>
 <input type="file" id="aiFrameFile" accept="image/*" hidden></section>
-<section class="panel step" id="stepAnalysis" aria-labelledby="stepAnalysisTitle" hidden><div class="step-head"><span class="step-num">2</span><div><h2 id="stepAnalysisTitle">Описание продукта</h2><p class="muted">Результат анализа фото. Поправь, если что-то не так.</p></div><button type="button" class="small" id="aiReanalyze">Проанализировать заново</button></div><div class="ai-grid" id="analysisFields"></div><p class="muted" id="analysisStatus" role="status"></p></section>
+<section class="panel step" id="stepAnalysis" aria-labelledby="stepAnalysisTitle" hidden><div class="step-head"><span class="step-num">2</span><div><h2 id="stepAnalysisTitle">Описание продукта</h2><p class="muted">Результат анализа фото. Поправь, если что-то не так — особенно размер и назначение (выделены).</p></div><button type="button" class="small" id="aiReanalyze">Проанализировать заново</button></div><div class="ai-grid" id="analysisFields"></div><p class="muted" id="analysisStatus" role="status"></p></section>
 <div class="section-head"><div><span class="step-num">3</span><div><h2 id="countLabel">Сцены</h2><p class="muted">Текст титра · картинка · видео. Видео — только после одобрения картинки.</p></div></div><div class="scene-tools"><span class="badge" id="arkBalance" title="Подробнее — во вкладке «Настройки»"></span><button type="button" id="aiMissing" class="small">Догенерировать недостающие картинки</button><button type="button" id="aiZip" class="small">Скачать кадры и видео .zip</button><button type="button" id="highlightAll" class="small">Автовыделения титров</button></div></div><div id="cards" class="cards"></div><div class="add-row"><button type="button" id="add">＋ Добавить сцену</button></div>
 <details class="help"><summary>Сохранение, импорт и работа с проектами</summary><p><strong>Сохранить ролик .json</strong> — переносимый файл с текстами, выделениями, длительностями и настройками его проекта. <strong>Сохранить все проекты</strong> — резервная копия всей библиотеки, включая NXA, POE и новые проекты.</p><p><strong>Импорт JSON / DRT / TXT</strong> открывает черновики v2–v5, планы сцен и резервные копии v5. Импорт добавляет ролики, не перезаписывая существующие. TXT загружается отдельным роликом с сохранением звёздочек, без принудительного автоподбора.</p><p><strong>Импорт DRT в это приложение</strong> поддерживает только совместимые титры NXA с 25 fps, включая файлы, созданные редактором. Восстанавливаются тексты, диапазоны выделений, шрифт, цвета и длительности. Длительности становятся ручными; кнопка «Авто» возвращает расчёт. Цвета выделений при новом экспорте назначаются по порядку фраз: первое и второе; пустой первый диапазон исходника не сохраняется. Видео, музыка, другие эффекты, произвольные шаблоны, зазоры и наложения титров не восстанавливаются. Для полного переноса внутри редактора надёжнее JSON.</p><p><strong>Экспорт .drt</strong> подготавливает файл. В отдельном окне браузера выбери «Сохранить файл…» (если поддерживается браузером) или «Скачать .drt». Встроенный предпросмотр для скачивания не используется. Сообщение «Файл сохранён» выводится только после подтверждённой записи через диалог сохранения. Обычное скачивание не даёт странице такого подтверждения.</p><p><strong>Импорт DRT в DaVinci</strong> — отдельное действие в Resolve: <strong>File → Import → Timeline</strong>. Эта HTML-страница не открывает Resolve и не импортирует туда автоматически.</p><p>Настройки профиля применяются при новом экспорте его роликов. Ранее сохранённые .drt не меняются. Другой шрифт можно использовать на основе NXA; другой тип титра, тень или анимация требуют адаптера по образцу .drt. Профиль POE сейчас хранит пожелания, но не выдаёт приблизительный NXA-титр за готовый POE.</p><p>Автосохранение хранится в браузере, не в HTML-файле. Очистка данных, другой браузер или новое имя HTML могут его сбросить. Перед переходом на новую версию сохрани JSON и импортируй его в новую страницу.</p></details>
 <details class="help"><summary>Как работают выделения и длительности</summary><p>Кнопка «Подобрать выделения» читает актуальный текст. Результат появляется рядом с ней. Если те же слова уже выделены, об этом явно написано; повторное нажатие не генерирует случайный новый вариант. Если правила не нашли фразу, существующие выделения не удаляются.</p><p>Можно поставить <code>*звёздочки*</code> вручную или выделить слова мышкой в поле и нажать «Выделить выбранное». Старые <code>**двойные звёздочки**</code> также поддерживаются.</p><p>Подбор ориентирован на твои примеры: полное название товара во вступлении, затем польза и целые фразы; две характеристики выделяются, когда образуют смысловую пару. Это набор правил, не обученная модель. Он не понимает все товары и языки.</p><p><code>секунды = max(2,52; 0,309826 + 0,051692 × символы)</code>, затем выбранный запас и округление до кадра при 25 fps. Это оценка по семи NXA-титрам. Для POE пока используется тот же темп, не отдельная калибровка. От 1 до 100 сцен; до 600 символов в одном экспортируемом титре.</p><p>Название ролика становится названием .drt и таймлайна. Проект в библиотеке самого Resolve приложение не переименовывает. Размер шрифта не уменьшается автоматически, длинные строки нужно проверить в Resolve.</p><div class="button-row"><button type="button" id="planExport" class="small">Сохранить план сцен .json</button><button type="button" id="saveText" class="small">Сохранить скрипт .txt</button></div></details>
@@ -122,12 +123,13 @@
 <h3 class="wide">Стиль</h3>
 <div class="wide"><label for="aiStyle">Общий стиль кадров <span class="muted">необязательно — подставляется как {style}</span></label><textarea id="aiStyle" rows="2" maxlength="2000" placeholder="Например: тёплый вечерний свет, уютная скандинавская гостиная, малая глубина резкости"></textarea></div>
 <div class="wide"><details class="help"><summary>Шаблоны промптов</summary>
-<p class="muted">Картинка: подставляются {product}, {scene_text}, {environment}, {style}. Видео: промпт выбирается по тому, есть ли люди на картинке.</p>
+<p class="muted">Картинка: подставляются {product}, {size}, {scene_text}, {environment}, {style}. Видео: промпт выбирается по тому, есть ли люди на картинке.</p>
 <label for="tplImage">Картинка — общий шаблон</label><textarea id="tplImage" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplImageReset">По умолчанию</button></div>
 <label for="tplVidPeople" style="margin-top:12px">Видео — в кадре есть люди</label><textarea id="tplVidPeople" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplVidPeopleReset">По умолчанию</button></div>
 <label for="tplVidProduct" style="margin-top:12px">Видео — только продукт</label><textarea id="tplVidProduct" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplVidProductReset">По умолчанию</button></div></details></div>
 <h3 class="wide">Соединение</h3>
 <div class="wide"><p><span class="badge" id="aiConn">Проверяю соединение…</span></p><p class="muted">OpenAI обычно отвечает браузеру напрямую. Если появляется «Нет соединения» (чаще у Seedance), запусти рядом с этим HTML <strong>«Запустить AI-сервер.command»</strong> или <code>python3 ai_server.py</code> и нажми «Проверить соединение». Страницу можно оставить открытой как файл.</p><div class="button-row"><button type="button" class="small" id="aiCheck">Проверить соединение</button><button type="button" class="small" id="aiClean">Очистить неиспользуемые файлы</button></div></div>
+<h3 class="wide">Сброс</h3><div class="wide"><p class="muted">Все ключи, модели и параметры сохраняются сразу при изменении и подставляются при следующем открытии этой страницы в этом браузере.</p><div class="button-row"><button type="button" class="small" id="aiResetSettings">Сбросить настройки</button></div></div>
 </div></section></div>
 </main></div>
 <aside id="resolveHelp" class="panel helpbox" role="region" aria-labelledby="filePanelTitle" hidden>
@@ -799,7 +801,7 @@ async function importDRT(bytes,fileName){
 const $=id=>document.getElementById(id),fmt=x=>Number(x).toFixed(2).replace('.',',');
 const STORAGE_KEY='nastya-titles-workspace-v5';
 let workspace,scenes=[],currentProfileId='nxa',currentJobId='',undoStack=[],persistTimer=null,storageOK=false,busy=false,editorMode='edit';
-function emptyJob(profileId,name='Новый ролик'){return {id:uuid(),profileId,name,mode:'flexible',factor:1,scenes:[{text:'',manual:null}],bulk:'',separator:'auto',autoHighlight:true,autoWrap:true,aiPhotos:[],aiEnvRef:'',aiAnalysis:null,aiAnalysisSig:''};}
+function emptyJob(profileId,name='Новый ролик'){return {id:uuid(),profileId,name,mode:'flexible',factor:1,scenes:[{text:'',manual:null}],bulk:'',separator:'auto',autoHighlight:true,autoWrap:true,aiPhotos:[],aiEnvRefs:[],aiAnalysis:null,aiAnalysisSig:''};}
 function initialWorkspace(){const nxa=emptyJob('nxa','EPCD-2003');nxa.scenes=T.original.map(text=>({text,manual:null}));const poe=emptyJob('poe','Новый ролик POE');return {format:'nastya-workspace-v5',version:5,profiles:[copy(DEFAULT_NXA),copy(DEFAULT_POE)],jobs:[nxa,poe],activeProfileId:'nxa',activeJobId:nxa.id,lastJobByProfile:{nxa:nxa.id,poe:poe.id}};}
 function draftScenes(value){
  const list=normalizeScenes(value);
@@ -811,7 +813,7 @@ function normalizeJob(o,profileId){
  const name=cleanString(String(o.name??o.projectName??'Новый ролик'),'Название ролика',120,true)||'Новый ролик';
  if(!['flexible','original'].includes(o.mode||'flexible')||![1,1.15,1.3].includes(Number(o.factor??1)))throw Error('Неверные настройки длительностей.');
  const bulk=String(o.bulk||'');if(bulk.length>200000)throw Error('Слишком большой скрипт.');
- return {id,profileId,name,mode:o.mode||'flexible',factor:Number(o.factor??1),scenes:draftScenes(o.scenes),bulk,separator:['auto','paragraphs','lines','numbered'].includes(o.separator)?o.separator:'auto',autoHighlight:o.autoHighlight!==false,autoWrap:o.autoWrap!==false,aiPhotos:normalizePhotos(o.aiPhotos,o.aiRef),aiEnvRef:mediaId(o.aiEnvRef),aiAnalysis:normalizeAnalysis(o.aiAnalysis),aiAnalysisSig:typeof o.aiAnalysisSig==='string'?o.aiAnalysisSig.slice(0,2200):''};
+ return {id,profileId,name,mode:o.mode||'flexible',factor:Number(o.factor??1),scenes:draftScenes(o.scenes),bulk,separator:['auto','paragraphs','lines','numbered'].includes(o.separator)?o.separator:'auto',autoHighlight:o.autoHighlight!==false,autoWrap:o.autoWrap!==false,aiPhotos:normalizePhotos(o.aiPhotos,o.aiRef),aiEnvRefs:normalizePhotos(o.aiEnvRefs,o.aiEnvRef),aiAnalysis:normalizeAnalysis(o.aiAnalysis),aiAnalysisSig:typeof o.aiAnalysisSig==='string'?o.aiAnalysisSig.slice(0,2200):''};
 }
 function validateWorkspace(o){
  if(!o||o.format!=='nastya-workspace-v5'||!Array.isArray(o.profiles)||!o.profiles.length||o.profiles.length>100||!Array.isArray(o.jobs)||o.jobs.length>500)throw Error('Неверный файл библиотеки проектов.');
@@ -1052,9 +1054,9 @@ window.addEventListener('pagehide',persist);
 // Keys live in this browser's storage under a separate key and never enter the
 // workspace JSON or exports. Images and videos are stored in IndexedDB.
 const AI_KEY='nastya-ai-settings-v1',AI_SERVER='http://127.0.0.1:8787',MAX_PHOTOS=10;
-const TPL_IMAGE='Commercial advertising photo for a product ad. Product: {product}. This scene communicates: "{scene_text}" — visually show this specific benefit. Show either a real person naturally using the product, or the product placed in a fitting real-life environment: {environment}. The product must look exactly like the reference images: same shape, colors, materials, proportions, label and logo. Logo and text on the product must be sharp, legible and undistorted. Photorealistic, professional lighting, clean composition, product is the clear focal point, natural emotions and poses, no extra text or watermarks. Style: {style}.';
-const TPL_VID_PEOPLE='Animate this image. The person calmly and naturally uses the product at a normal, realistic pace. No sudden or fast movements. Slow, smooth camera movement throughout (gentle dolly or slight pan). The product and its logo stay perfectly stable and undistorted — the logo must not warp, melt or float. Keep the product\'s appearance identical to the first frame.';
-const TPL_VID_PRODUCT='Slow, smooth cinematic camera move around the product: a gentle orbit around it OR a slow push-in. The camera is always moving, but never fast or jerky. The product stays still and sharp; its logo and text remain perfectly stable and undistorted, no warping or floating. Keep lighting and environment consistent with the first frame.';
+const TPL_IMAGE='Photorealistic commercial advertising photograph. Product: {product}. Real-world size: {size}. This scene communicates: "{scene_text}" — visually show this specific benefit through the situation, not through text. Show either a real person naturally using the product, or the product placed in a fitting real-life environment: {environment}.\nPRODUCT: must look exactly like the reference images — identical shape, proportions, colors, materials, label and logo. Do not stretch, squash, enlarge or simplify it. Its scale must be realistic relative to people, hands and surrounding objects.\nPEOPLE: real, natural-looking humans — visible skin pores and natural skin texture, fine hair strands and realistic hair texture, natural imperfections, realistic hands with correct fingers, natural poses and emotions. No plastic, airbrushed, waxy or CGI look.\nIMAGE: clean photo only. No text, captions, letters, numbers, labels, UI elements, icons, arrows, frames, watermarks, glows, sparkles, light rays, lens flares or any other graphic effects or overlays. The only text allowed is what physically exists on the product itself, kept sharp and undistorted.\nProfessional natural lighting, real camera look (shallow depth of field where appropriate), clean composition with the product as the clear focal point. Style: {style}.';
+const TPL_VID_PEOPLE='Animate this image. The person calmly and naturally uses the product at a normal, realistic pace. No sudden or fast movements. Slow, smooth camera movement throughout (gentle dolly or slight pan). The product keeps its exact shape, proportions and size; its logo stays perfectly stable and undistorted — no warping, melting or floating. Skin, hair and faces remain realistic and consistent with the first frame. No text or graphic effects appear.';
+const TPL_VID_PRODUCT='Slow, smooth cinematic camera move around the product: a gentle orbit around it OR a slow push-in. The camera is always moving, but never fast or jerky. The product stays still and sharp, keeping its exact shape and proportions; its logo and text remain perfectly stable and undistorted, no warping or floating. Keep lighting and environment consistent with the first frame. No text or graphic effects appear.';
 const FORMAT_SIZE={'9:16':'1024x1536','16:9':'1536x1024','1:1':'1024x1024'};
 const AI_DEFAULTS={openaiKey:'',imageModel:'gpt-image-2',visionModel:'gpt-5-mini',imageQuality:'high',format:'9:16',
  arkKey:'',arkBase:'https://ark.ap-southeast.bytepluses.com/api/v3',videoModel:'dreamina-seedance-2-0-260128',resolution:'720p',duration:5,audio:false,watermark:false,legacyFlags:false,
@@ -1062,15 +1064,19 @@ const AI_DEFAULTS={openaiKey:'',imageModel:'gpt-image-2',visionModel:'gpt-5-mini
  prices:{'dreamina-seedance-2-0-260128':7,'dreamina-seedance-2-0-fast-260128':4.2,'dreamina-seedance-2-0-mini-260615':1.4,other:7},v:2};
 const SEEDANCE_MODELS={'dreamina-seedance-2-0-260128':'Seedance 2.0','dreamina-seedance-2-0-fast-260128':'Seedance 2.0 Fast','dreamina-seedance-2-0-mini-260615':'Seedance 2.0 Mini'};
 const LEDGER_KEY='nastya-ai-ledger-v1';
-const ANALYSIS_FIELDS=[['name','Продукт'],['category','Тип продукта'],['purpose','Для чего используется','wide'],['users','Кто использует'],['places','Где обычно применяют'],['colors','Цвета'],['materials','Материалы'],['shape','Форма'],['logo_present','Логотип есть?'],['logo_location','Где логотип'],['logo_text','Текст логотипа'],['details','Важные детали внешнего вида','wide'],['environment','Окружение для кадров','wide']];
-const ANALYZE_SYSTEM='Ты анализируешь фото продукта для рекламного ролика. Внимательно рассмотри все фото продукта и, если есть, референс окружения. Верни только JSON-объект с ключами: '+
- '"name" (название продукта, с брендом и моделью, если видны), "category" (что это за продукт), "purpose" (для чего используется), "users" (кто им пользуется), "places" (где его обычно применяют), '+
- '"colors", "materials", "shape" (форма и пропорции), "logo_present" (true/false), "logo_location" (где именно на продукте логотип), "logo_text" (текст логотипа точно как на продукте), '+
- '"details" (кнопки, надписи, фактуры и другие детали, которые важно сохранить), "environment" (если есть референс окружения — опиши обстановку с него; иначе подбери типичную реальную обстановку по назначению продукта). '+
- 'Значения — короткие точные фразы на русском, кроме текста логотипа. Не выдумывай то, чего не видно.';
+const ANALYSIS_FIELDS=[['name','Продукт'],['category','Тип продукта'],['purpose','Для чего используется','wide',true],['users','Кто использует'],['places','Где обычно применяют'],['size_cm','Реальный размер, см (Ш × В × Г)',false,true],['handling','Как держат или ставят рядом с человеком','wide',true],['proportions','Пропорции (высота : ширина : глубина)'],['shape','Форма'],['colors','Цвета'],['materials','Материалы'],['logo_present','Логотип есть?'],['logo_location','Где логотип'],['logo_text','Текст логотипа'],['details','Важные детали внешнего вида','wide'],['environment','Окружение для кадров','wide'],['env_list','Что на референсах окружения (по одному в строке: «1: …»)','wide']];
+const ANALYZE_SYSTEM='Ты анализируешь фото продукта для рекламного ролика. Внимательно рассмотри все фото продукта и все референсы окружения, если они есть. Верни только JSON-объект с ключами: '+
+ '"name" (название продукта, с брендом и моделью, если видны), "category" (что это за продукт), "purpose" (для чего используется), "users" (кто им пользуется), "places" (где его обычно применяют; если есть референсы окружения — опирайся на них), '+
+ '"size_cm" (примерный реальный физический размер в сантиметрах: ширина × высота × глубина, например «≈ 14 × 14 × 3 см»; оцени по деталям — кнопкам, разъёмам, рукам, предметам рядом), '+
+ '"handling" (как продукт держат в руках или ставят рядом с человеком: одной рукой, двумя, на столе, на полу, носят на ремне и т. п., и каким он выглядит рядом с человеком по размеру), '+
+ '"proportions" (соотношение высоты, ширины и глубины, например «высота : ширина : глубина ≈ 1 : 1 : 0,2»), "shape" (форма), "colors", "materials", "logo_present" (true/false), "logo_location" (где именно на продукте логотип), "logo_text" (текст логотипа точно как на продукте), '+
+ '"details" (кнопки, надписи, фактуры и другие детали, которые важно сохранить), "environment" (общая обстановка для кадров: из референсов окружения, если они есть; иначе типичная реальная обстановка по назначению продукта), '+
+ '"env_list" (только если есть референсы окружения: по одной строке на каждый референс по порядку, формат «1: короткое описание обстановки»; иначе пустая строка). '+
+ 'Значения — короткие точные фразы на русском, кроме текста логотипа. Не выдумывай то, чего не видно; размер всегда давай как оценку.';
 const PLAN_SYSTEM='You plan shots for a product advertising video. For each scene decide whether its benefit is best shown by a real person naturally using the product (people: true) or by the product alone in a fitting real-life environment (people: false). '+
  'Write "shot": one or two English sentences describing the concrete visual for that scene (setting, action, framing, camera angle) that shows the scene\'s specific benefit. Keep the environment consistent across scenes and vary the framing. '+
- 'Return only JSON: {"scenes":[{"n":1,"people":true,"shot":"..."}]} with one entry per scene.';
+ 'If environment references are listed, pick for each scene "env": the numbers of the 1–2 references that best fit it (empty array if none fit). '+
+ 'Return only JSON: {"scenes":[{"n":1,"people":true,"shot":"...","env":[1]}]} with one entry per scene.';
 const PEOPLE_SYSTEM='Return only JSON {"people": true|false}. true if any person or human body part (including hands) is visible in the image, otherwise false.';
 let aiSettings=(()=>{let o={};try{o=JSON.parse(localStorage.getItem(AI_KEY)||'{}')||{};}catch{}const s={...AI_DEFAULTS,...o};if(!o.format&&FORMAT_SIZE[o.ratio])s.format=o.ratio;if(!FORMAT_SIZE[s.format])s.format='9:16';s.prices={...AI_DEFAULTS.prices,...(o.prices&&typeof o.prices==='object'?o.prices:{})};
  if(!(o.v>=2)){s.v=2;s.resolution='720p';if(!SEEDANCE_MODELS[s.videoModel])s.videoModel=AI_DEFAULTS.videoModel;}return s;})();
@@ -1084,7 +1090,7 @@ const mediaId=v=>typeof v==='string'&&/^[\w.:-]{1,100}$/.test(v)?v:'';
 function normalizeAI(a){
  if(!a||typeof a!=='object')return undefined;
  const str=(v,m)=>typeof v==='string'&&v.length<=m?v:'',bool=v=>v===true||v===false?v:null;
- return {uid:mediaId(a.uid)||uuid(),shot:str(a.shot,2000),planPeople:bool(a.planPeople),people:bool(a.people),imgPrompt:str(a.imgPrompt,8000),vidPrompt:str(a.vidPrompt,8000),
+ return {uid:mediaId(a.uid)||uuid(),shot:str(a.shot,2000),planPeople:bool(a.planPeople),env:Array.isArray(a.env)?a.env.map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=10).slice(0,2):[],envPlanned:a.envPlanned===true,people:bool(a.people),imgPrompt:str(a.imgPrompt,8000),vidPrompt:str(a.vidPrompt,8000),
   image:mediaId(a.image),video:mediaId(a.video),videoUrl:/^https:\/\//.test(a.videoUrl||'')?str(a.videoUrl,4000):'',task:mediaId(a.task),vidModel:str(a.vidModel,120),vidRes:str(a.vidRes,10),vidRatio:str(a.vidRatio,10),vidDur:Number.isFinite(a.vidDur)?a.vidDur:0,
   vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true};
 }
@@ -1095,7 +1101,7 @@ function normalizeAnalysis(a){
 }
 function normalizePhotos(list,legacy){const a=(Array.isArray(list)?list:legacy?[legacy]:[]).map(mediaId).filter(Boolean);return [...new Set(a)].slice(0,MAX_PHOTOS);}
 function aiOf(s){if(!s.ai)s.ai=normalizeAI({});return s.ai;}
-function photoSig(j){return [...(j.aiPhotos||[]),j.aiEnvRef||''].join('|');}
+function photoSig(j){return [...(j.aiPhotos||[]),'env',...(j.aiEnvRefs||[])].join('|');}
 
 // --- media storage (IndexedDB) ---
 const mediaDB=(()=>{let p;
@@ -1169,22 +1175,32 @@ function scenePlain(s){try{return parse(s.text).plain.replace(/\s+/g,' ').trim()
 function productText(a){
  if(!a||!Object.values(a).some(v=>typeof v==='string'&&v.trim()))return '';
  const logo=a.logo_present?'logo: '+([a.logo_text&&'"'+a.logo_text+'"',a.logo_location].filter(Boolean).join(', ')||'present'):'no visible logo';
- return [[a.name,a.category&&'('+a.category+')'].filter(Boolean).join(' '),a.shape&&'shape: '+a.shape,a.colors&&'colors: '+a.colors,a.materials&&'materials: '+a.materials,logo,a.details&&'details: '+a.details].filter(Boolean).join('; ');
+ return [[a.name,a.category&&'('+a.category+')'].filter(Boolean).join(' '),a.shape&&'shape: '+a.shape,a.proportions&&'proportions (H:W:D): '+a.proportions,a.colors&&'colors: '+a.colors,a.materials&&'materials: '+a.materials,logo,a.details&&'details: '+a.details].filter(Boolean).join('; ');
 }
 function autoImagePrompt(s,j=job()){
  const a=j?.aiAnalysis||{},style=String(aiSettings.style||'').trim(),ai=s.ai||{};
  let p=String(aiSettings.tplImage||'').trim()||TPL_IMAGE;
  if(!style)p=p.replace(/\s*Style:\s*\{style\}\.?/,'');
- p=p.replaceAll('{product}',productText(a)||'the product shown in the reference images').replaceAll('{scene_text}',scenePlain(s))
+ const size=[a.size_cm,a.handling].filter(x=>x&&String(x).trim()).join('; ');
+ if(!size)p=p.replace(/\s*Real-world size:\s*\{size\}\.?/,'');
+ p=p.replaceAll('{product}',productText(a)||'the product shown in the reference images').replaceAll('{size}',size).replaceAll('{scene_text}',scenePlain(s))
   .replaceAll('{environment}',a.environment||a.places||'a fitting real-life setting for this product').replaceAll('{style}',style);
  const extra=[];
  if(ai.planPeople===true)extra.push('For this scene: show a real person naturally using the product.');
  else if(ai.planPeople===false)extra.push('For this scene: no people — the product in its real-life environment.');
  if(ai.shot)extra.push('Shot: '+ai.shot);
  const n=(j?.aiPhotos||[]).length;
- if(n)extra.push('Reference images'+(n>1?' 1–'+n:' 1')+' show the real product.'+(j.aiEnvRef?' The last reference image shows the real-life environment to match.':''));
+ const envN=sceneEnvKeys(s,j).length;
+ if(n)extra.push('Reference images'+(n>1?' 1–'+n:' 1')+' show the real product.'+(envN?' Reference image'+(envN>1?'s '+(n+1)+'–'+(n+envN)+' show real-life environments':' '+(n+1)+' shows a real-life environment')+' to match.':''));
  extra.push('Aspect ratio '+aiSettings.format+({'9:16':', vertical','16:9':', horizontal','1:1':', square'}[aiSettings.format]||'')+'.');
  return p+'\n\n'+extra.join('\n');
+}
+function sceneEnvKeys(s,j){
+ const env=(j?.aiEnvRefs||[]);if(!env.length)return [];
+ const pick=(s.ai?.env||[]).filter(n=>n>=1&&n<=env.length).slice(0,2);
+ if(pick.length)return pick.map(n=>env[n-1]);
+ if(Array.isArray(s.ai?.env)&&s.ai.envPlanned)return [];
+ const list=j===job()?scenes:j.scenes,i=Math.max(0,list.indexOf(s));return [env[i%env.length]];
 }
 function imagePrompt(s,j){return (s.ai?.imgPrompt||'').trim()||autoImagePrompt(s,j);}
 function scenePeople(s){return s.ai?.people??s.ai?.planPeople??false;}
@@ -1207,9 +1223,9 @@ function elapsed(t0){const s=Math.round((Date.now()-t0)/1000);return Math.floor(
 // --- analysis, plan, generation ---
 async function analyzeProduct(j){
  const photos=(await Promise.all(j.aiPhotos.map(getBlob))).filter(Boolean);if(!photos.length)throw Error('Фото продукта не найдены в этом браузере. Добавь их заново.');
- const env=await getBlob(j.aiEnvRef);
+ const env=(await Promise.all((j.aiEnvRefs||[]).map(getBlob))).filter(Boolean);
  const content=[{type:'text',text:'Фото продукта ('+photos.length+' шт.):'}];for(const b of photos)content.push(await imgPart(b,'high'));
- if(env)content.push({type:'text',text:'Референс окружения — как продукт выглядит в реальной обстановке:'},await imgPart(env,'low'));
+ if(env.length){content.push({type:'text',text:'Референсы окружения ('+env.length+' шт.) — как продукт выглядит в реальной обстановке, по порядку:'});for(const [k,b] of env.entries())content.push({type:'text',text:'Референс '+(k+1)+':'},await imgPart(b,'low'));}
  const script=(j.bulk||'').trim();if(script)content.push({type:'text',text:'Скрипт ролика (для контекста):\n'+script.slice(0,4000)});
  content.push({type:'text',text:'Верни JSON с описанием продукта.'});
  const r=normalizeAnalysis(await chatJSON([{role:'system',content:ANALYZE_SYSTEM},{role:'user',content}]));
@@ -1218,9 +1234,9 @@ async function analyzeProduct(j){
 }
 async function planScenes(targets,j){
  const a=j.aiAnalysis||{},list=j===job()?scenes:j.scenes;
- const r=await chatJSON([{role:'system',content:PLAN_SYSTEM},{role:'user',content:JSON.stringify({product:productText(a),purpose:a.purpose,users:a.users,places:a.places,environment:a.environment,scenes:targets.map(s=>({n:list.indexOf(s)+1,text:scenePlain(s)}))})}]);
+ const r=await chatJSON([{role:'system',content:PLAN_SYSTEM},{role:'user',content:JSON.stringify({product:productText(a),purpose:a.purpose,users:a.users,places:a.places,environment:a.environment,environment_references:(j.aiEnvRefs||[]).length?(a.env_list||'').trim()||(j.aiEnvRefs.length+' references, no descriptions'):undefined,scenes:targets.map(s=>({n:list.indexOf(s)+1,text:scenePlain(s)}))})}]);
  const out=Array.isArray(r?.scenes)?r.scenes:[];
- targets.forEach((s,k)=>{const n=list.indexOf(s)+1,p=out.find(x=>Number(x?.n)===n)||out[k]||{};s.ai={...aiOf(s),planPeople:typeof p.people==='boolean'?p.people:null,shot:typeof p.shot==='string'?p.shot.slice(0,2000):''};});
+ targets.forEach((s,k)=>{const n=list.indexOf(s)+1,p=out.find(x=>Number(x?.n)===n)||out[k]||{};s.ai={...aiOf(s),planPeople:typeof p.people==='boolean'?p.people:null,shot:typeof p.shot==='string'?p.shot.slice(0,2000):'',env:Array.isArray(p.env)?p.env.map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=(j.aiEnvRefs||[]).length).slice(0,2):[],envPlanned:Array.isArray(p.env)};});
  markDirty();
 }
 async function detectPeople(uid,key){
@@ -1231,7 +1247,7 @@ async function generateImage(uid){
  const f=findScene(uid);if(!f)throw Error('Сцена удалена.');
  const {s,j}=f,prompt=imagePrompt(s,j);
  const common={model:String(aiSettings.imageModel||'').trim()||'gpt-image-2',size:FORMAT_SIZE[aiSettings.format]||'1024x1536',quality:aiSettings.imageQuality,n:1,output_format:'jpeg'};
- const refs=(await Promise.all([...j.aiPhotos,j.aiEnvRef].filter(Boolean).map(getBlob))).filter(Boolean);
+ const refs=(await Promise.all([...j.aiPhotos,...sceneEnvKeys(s,j)].filter(Boolean).map(getBlob))).filter(Boolean);
  let data;
  if(refs.length){
   const fd=new FormData();for(const [k,v] of Object.entries(common))fd.append(k,String(v));fd.append('prompt',prompt);
@@ -1415,21 +1431,22 @@ async function renderThumbs(box,keys,kind){
   const x=document.createElement('button');x.type='button';x.className='thumb-x';x.dataset.remove=kind;x.dataset.key=k;x.setAttribute('aria-label','Удалить фото');x.textContent='×';f.append(x);box.append(f);});
 }
 function renderPhotos(){
- const j=job();if(!j)return;renderThumbs($('photoThumbs'),j.aiPhotos,'photo');renderThumbs($('envThumbs'),j.aiEnvRef?[j.aiEnvRef]:[],'env');
+ const j=job();if(!j)return;renderThumbs($('photoThumbs'),j.aiPhotos,'photo');renderThumbs($('envThumbs'),j.aiEnvRefs,'env');
  $('photoCount').textContent=j.aiPhotos.length+' из '+MAX_PHOTOS;
  $('photoHint').textContent=j.aiPhotos.length>=MAX_PHOTOS?'Добавлено максимальное число фото.':'Перетащи фото сюда или нажми, чтобы выбрать файлы';
- $('envHint').textContent=j.aiEnvRef?'Перетащи другое фото, чтобы заменить':'Перетащи фото сюда или нажми, чтобы выбрать файл';
+ $('envCount').textContent=j.aiEnvRefs.length?j.aiEnvRefs.length+' из '+MAX_PHOTOS:'';
+ $('envHint').textContent=j.aiEnvRefs.length>=MAX_PHOTOS?'Добавлено максимальное число фото.':'Перетащи фото сюда или нажми, чтобы выбрать файлы';
  refreshAnalysisNote();
 }
 async function addPhotos(files,kind){
- const j=job(),list=[...files].filter(f=>/^image\//.test(f.type)||/\.(heic|heif|jpe?g|png|webp|gif|bmp|tiff?)$/i.test(f.name));
+ const j=job(),field=kind==='env'?'aiEnvRefs':'aiPhotos',label=kind==='env'?'референсов окружения':'фото продукта';
+ const list=[...files].filter(f=>/^image\//.test(f.type)||/\.(heic|heif|jpe?g|png|webp|gif|bmp|tiff?)$/i.test(f.name));
  if(!list.length)throw Error('Нужны изображения: JPG, PNG, WebP или HEIC.');
- if(kind==='env'){j.aiEnvRef=await storeMedia('env',await prepareUpload(list[0]));persist();renderPhotos();setStatus('Референс окружения добавлен.');return;}
- const room=MAX_PHOTOS-j.aiPhotos.length;if(room<=0)throw Error('Уже '+MAX_PHOTOS+' фото — удали лишние.');
+ const room=MAX_PHOTOS-j[field].length;if(room<=0)throw Error('Уже '+MAX_PHOTOS+' '+label+' — удали лишние.');
  const errors=[];let added=0;
- for(const f of list.slice(0,room)){try{j.aiPhotos.push(await storeMedia('photo',await prepareUpload(f)));added++;}catch(e){errors.push(e.message);}}
+ for(const f of list.slice(0,room)){try{j[field].push(await storeMedia(kind==='env'?'env':'photo',await prepareUpload(f)));added++;}catch(e){errors.push(e.message);}}
  persist();renderPhotos();
- const msg='Добавлено фото: '+added+'.'+(list.length>room?' Лишние пропущены: максимум '+MAX_PHOTOS+'.':'')+(errors.length?' '+errors.join(' '):'');setStatus(msg,!!errors.length||list.length>room);
+ const msg='Добавлено '+label+': '+added+'.'+(list.length>room?' Лишние пропущены: максимум '+MAX_PHOTOS+'.':'')+(errors.length?' '+errors.join(' '):'');setStatus(msg,!!errors.length||list.length>room);
 }
 for(const [zone,input,kind] of [['photoDrop','photoFile','photo'],['envDrop','envFile','env']]){
  const z=$(zone),inp=$(input);
@@ -1440,14 +1457,15 @@ for(const [zone,input,kind] of [['photoDrop','photoFile','photo'],['envDrop','en
  z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('drag');addPhotos(e.dataTransfer.files,kind).catch(err=>setStatus(err.message,true));});
  inp.addEventListener('change',()=>{const files=[...inp.files];inp.value='';if(files.length)addPhotos(files,kind).catch(err=>setStatus(err.message,true));});
 }
-function removePhoto(kind,key){const j=job();if(kind==='env')j.aiEnvRef='';else j.aiPhotos=j.aiPhotos.filter(k=>k!==key);persist();renderPhotos();setStatus('Фото удалено.');}
+function removePhoto(kind,key){const j=job(),field=kind==='env'?'aiEnvRefs':'aiPhotos';j[field]=j[field].filter(k=>k!==key);persist();renderPhotos();setStatus('Фото удалено.');}
 
 // --- analysis panel ---
 function renderAnalysis(){
  const j=job(),a=j?.aiAnalysis;$('stepAnalysis').hidden=!a;if(!a)return;
  const box=$('analysisFields');box.replaceChildren();
- for(const [k,label,wide] of ANALYSIS_FIELDS){
-  const d=document.createElement('div');if(wide)d.className='wide';const l=document.createElement('label');l.htmlFor='an-'+k;l.textContent=label;let el;
+ for(const [k,label,wide,key] of ANALYSIS_FIELDS){
+  if(k==='env_list'&&!(j.aiEnvRefs||[]).length&&!a.env_list)continue;
+  const d=document.createElement('div');d.className=[wide&&'wide',key&&'key-field'].filter(Boolean).join(' ');const l=document.createElement('label');l.htmlFor='an-'+k;l.textContent=label;let el;
   if(k==='logo_present'){el=document.createElement('select');for(const [v,t] of [['1','Да'],['0','Нет']]){const o=document.createElement('option');o.value=v;o.textContent=t;el.append(o);}el.value=a[k]?'1':'0';}
   else if(wide){el=document.createElement('textarea');el.rows=2;el.value=a[k]||'';}
   else{el=document.createElement('input');el.value=a[k]||'';}
@@ -1455,7 +1473,7 @@ function renderAnalysis(){
  }
  refreshAnalysisNote();
 }
-function refreshAnalysisNote(){const j=job(),n=$('analysisStatus');if(!j?.aiAnalysis)return;n.classList.toggle('error',j.aiAnalysisSig!==photoSig(j));n.textContent=j.aiAnalysisSig!==photoSig(j)?'Фото изменились после анализа. При «Начать» анализ выполнится заново, ручные правки заменятся.':'Описание подставляется в промпт каждой картинки как {product} и {environment}.';}
+function refreshAnalysisNote(){const j=job(),n=$('analysisStatus');if(!j?.aiAnalysis)return;n.classList.toggle('error',j.aiAnalysisSig!==photoSig(j));n.textContent=j.aiAnalysisSig!==photoSig(j)?'Фото изменились после анализа. При «Начать» анализ выполнится заново, ручные правки заменятся.':'Описание подставляется в промпт каждой картинки: {product}, {size} и {environment}. Особенно проверь размер и назначение — от них зависят масштаб продукта и сюжет кадров.';}
 $('analysisFields').addEventListener('input',e=>{const k=e.target.dataset.field,j=job();if(!k||!j.aiAnalysis)return;j.aiAnalysis[k]=k==='logo_present'?e.target.value==='1':e.target.value;markDirty();});
 $('analysisFields').addEventListener('change',e=>{if(e.target.dataset.field==='logo_present'){job().aiAnalysis.logo_present=e.target.value==='1';markDirty();}});
 
@@ -1598,11 +1616,18 @@ for(const [id,key,def] of [['tplImage','tplImage',TPL_IMAGE],['tplVidPeople','tp
  ta.addEventListener('input',()=>{aiSettings[key]=ta.value.trim()===def.trim()?'':ta.value;saveAISettings();});
  $(id+'Reset').addEventListener('click',()=>{ta.value=def;aiSettings[key]='';saveAISettings();setStatus('Шаблон восстановлен.');});
 }
+$('aiResetSettings').addEventListener('click',()=>{
+ if(!confirm('Сбросить модели, параметры, стиль, шаблоны и цены к значениям по умолчанию?'))return;
+ const keepKeys=confirm('Оставить ключи API?\n\nOK — оставить ключи. Отмена — удалить и ключи тоже.');
+ const keys={openaiKey:aiSettings.openaiKey,arkKey:aiSettings.arkKey};
+ aiSettings={...AI_DEFAULTS,prices:{...AI_DEFAULTS.prices},...(keepKeys?keys:{})};saveAISettings();
+ location.reload();
+});
 $('aiCheck').addEventListener('click',async()=>{const p=await checkProxy();refreshKeysNotice();setStatus(p?'AI-сервер найден: запросы пойдут через него.':'AI-сервер не найден: запросы пойдут напрямую из браузера.');});
 $('aiClean').addEventListener('click',async()=>{
  try{stash();const used=new Set();
   for(const list of [scenes,...workspace.jobs.map(j=>j.scenes),...undoStack.map(u=>u.scenes)])for(const s of list){if(s.ai?.image)used.add(s.ai.image);if(s.ai?.video)used.add(s.ai.video);}
-  for(const j of workspace.jobs){for(const k of j.aiPhotos||[])used.add(k);if(j.aiEnvRef)used.add(j.aiEnvRef);}
+  for(const j of workspace.jobs){for(const k of [...(j.aiPhotos||[]),...(j.aiEnvRefs||[])])used.add(k);}
   let n=0;for(const k of await mediaDB.keys())if(!used.has(k)){await mediaDB.del(k);aiMedia.delete(k);n++;}
   setStatus('Удалено неиспользуемых файлов: '+n+'.');
  }catch(e){setStatus(e.message,true);}
