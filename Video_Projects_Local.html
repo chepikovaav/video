@@ -64,6 +64,9 @@
 .section-head .step-num{margin-right:4px}.section-head>div:first-child{display:flex;gap:10px;align-items:flex-start}
 .scene-tools{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
 #keysNotice .button-row{margin-top:8px}
+.ledger{font:11px/1.6 ui-monospace,Menlo,monospace;background:#f5f7f2;border-radius:8px;padding:10px 12px;max-height:260px;overflow:auto;white-space:pre-wrap;margin:10px 0 0}
+.vid-cost{font-size:11.5px;color:var(--ink);background:#f1f5ea;border-radius:6px;padding:5px 8px;margin:0}.vid-cost:empty{display:none}
+#arkBalance:empty{display:none}#arkBalance.low,#arkBalanceSettings.low{background:#fde7e0;color:#a3392d;border-color:#efc4b6}
 @media(max-width:1100px){.cardbody.three{grid-template-columns:1fr}.media{max-height:560px}.ai-grid{grid-template-columns:1fr 1fr}.prompt-grid{grid-template-columns:1fr}}
 @media(max-width:700px){.ai-grid{grid-template-columns:1fr}.thumb{width:78px;height:78px}.section-head{flex-direction:column;align-items:flex-start}.scene-tools{justify-content:flex-start}}
 </style></head><body>
@@ -88,7 +91,7 @@
 <ol class="pipeline" id="pipeline" hidden><li data-step="analyze">Анализ продукта по фото</li><li data-step="split">Разбивка скрипта на сцены</li><li data-step="plan">Решение по сценам: человек с продуктом или продукт в окружении</li><li data-step="images">Генерация картинок</li></ol><p class="muted" id="pipeStatus" role="status" aria-live="polite"></p>
 <input type="file" id="aiFrameFile" accept="image/*" hidden></section>
 <section class="panel step" id="stepAnalysis" aria-labelledby="stepAnalysisTitle" hidden><div class="step-head"><span class="step-num">2</span><div><h2 id="stepAnalysisTitle">Описание продукта</h2><p class="muted">Результат анализа фото. Поправь, если что-то не так.</p></div><button type="button" class="small" id="aiReanalyze">Проанализировать заново</button></div><div class="ai-grid" id="analysisFields"></div><p class="muted" id="analysisStatus" role="status"></p></section>
-<div class="section-head"><div><span class="step-num">3</span><div><h2 id="countLabel">Сцены</h2><p class="muted">Текст титра · картинка · видео. Видео — только после одобрения картинки.</p></div></div><div class="scene-tools"><button type="button" id="aiMissing" class="small">Догенерировать недостающие картинки</button><button type="button" id="aiZip" class="small">Скачать кадры и видео .zip</button><button type="button" id="highlightAll" class="small">Автовыделения титров</button></div></div><div id="cards" class="cards"></div><div class="add-row"><button type="button" id="add">＋ Добавить сцену</button></div>
+<div class="section-head"><div><span class="step-num">3</span><div><h2 id="countLabel">Сцены</h2><p class="muted">Текст титра · картинка · видео. Видео — только после одобрения картинки.</p></div></div><div class="scene-tools"><span class="badge" id="arkBalance" title="Подробнее — во вкладке «Настройки»"></span><button type="button" id="aiMissing" class="small">Догенерировать недостающие картинки</button><button type="button" id="aiZip" class="small">Скачать кадры и видео .zip</button><button type="button" id="highlightAll" class="small">Автовыделения титров</button></div></div><div id="cards" class="cards"></div><div class="add-row"><button type="button" id="add">＋ Добавить сцену</button></div>
 <details class="help"><summary>Сохранение, импорт и работа с проектами</summary><p><strong>Сохранить ролик .json</strong> — переносимый файл с текстами, выделениями, длительностями и настройками его проекта. <strong>Сохранить все проекты</strong> — резервная копия всей библиотеки, включая NXA, POE и новые проекты.</p><p><strong>Импорт JSON / DRT / TXT</strong> открывает черновики v2–v5, планы сцен и резервные копии v5. Импорт добавляет ролики, не перезаписывая существующие. TXT загружается отдельным роликом с сохранением звёздочек, без принудительного автоподбора.</p><p><strong>Импорт DRT в это приложение</strong> поддерживает только совместимые титры NXA с 25 fps, включая файлы, созданные редактором. Восстанавливаются тексты, диапазоны выделений, шрифт, цвета и длительности. Длительности становятся ручными; кнопка «Авто» возвращает расчёт. Цвета выделений при новом экспорте назначаются по порядку фраз: первое и второе; пустой первый диапазон исходника не сохраняется. Видео, музыка, другие эффекты, произвольные шаблоны, зазоры и наложения титров не восстанавливаются. Для полного переноса внутри редактора надёжнее JSON.</p><p><strong>Экспорт .drt</strong> подготавливает файл. В отдельном окне браузера выбери «Сохранить файл…» (если поддерживается браузером) или «Скачать .drt». Встроенный предпросмотр для скачивания не используется. Сообщение «Файл сохранён» выводится только после подтверждённой записи через диалог сохранения. Обычное скачивание не даёт странице такого подтверждения.</p><p><strong>Импорт DRT в DaVinci</strong> — отдельное действие в Resolve: <strong>File → Import → Timeline</strong>. Эта HTML-страница не открывает Resolve и не импортирует туда автоматически.</p><p>Настройки профиля применяются при новом экспорте его роликов. Ранее сохранённые .drt не меняются. Другой шрифт можно использовать на основе NXA; другой тип титра, тень или анимация требуют адаптера по образцу .drt. Профиль POE сейчас хранит пожелания, но не выдаёт приблизительный NXA-титр за готовый POE.</p><p>Автосохранение хранится в браузере, не в HTML-файле. Очистка данных, другой браузер или новое имя HTML могут его сбросить. Перед переходом на новую версию сохрани JSON и импортируй его в новую страницу.</p></details>
 <details class="help"><summary>Как работают выделения и длительности</summary><p>Кнопка «Подобрать выделения» читает актуальный текст. Результат появляется рядом с ней. Если те же слова уже выделены, об этом явно написано; повторное нажатие не генерирует случайный новый вариант. Если правила не нашли фразу, существующие выделения не удаляются.</p><p>Можно поставить <code>*звёздочки*</code> вручную или выделить слова мышкой в поле и нажать «Выделить выбранное». Старые <code>**двойные звёздочки**</code> также поддерживаются.</p><p>Подбор ориентирован на твои примеры: полное название товара во вступлении, затем польза и целые фразы; две характеристики выделяются, когда образуют смысловую пару. Это набор правил, не обученная модель. Он не понимает все товары и языки.</p><p><code>секунды = max(2,52; 0,309826 + 0,051692 × символы)</code>, затем выбранный запас и округление до кадра при 25 fps. Это оценка по семи NXA-титрам. Для POE пока используется тот же темп, не отдельная калибровка. От 1 до 100 сцен; до 600 символов в одном экспортируемом титре.</p><p>Название ролика становится названием .drt и таймлайна. Проект в библиотеке самого Resolve приложение не переименовывает. Размер шрифта не уменьшается автоматически, длинные строки нужно проверить в Resolve.</p><div class="button-row"><button type="button" id="planExport" class="small">Сохранить план сцен .json</button><button type="button" id="saveText" class="small">Сохранить скрипт .txt</button></div></details>
 <p class="legal">v6.0 · 1920 × 1080 · 25 fps · старт 01:00:00:00. Предпросмотр условный, шрифты не встроены. Новые параметры и импорт .drt требуют просмотра в Resolve. Сетевые запросы — только к OpenAI и Seedance по кнопкам «Начать» и генерации в сценах; ключи хранятся в этом браузере. Нет установки агента или доступа к экрану. Встроенная копия исходного шаблона содержит частные названия и пути: не публикуй этот HTML как обезличенный файл.</p>
@@ -102,12 +105,20 @@
 <h3 class="wide">Seedance · видео из картинки</h3>
 <div class="wide"><label for="aiArkKey">ModelArk API key</label><input id="aiArkKey" type="password" autocomplete="off" spellcheck="false"></div>
 <div><label for="aiArkBase">Платформа</label><select id="aiArkBase"><option value="https://ark.ap-southeast.bytepluses.com/api/v3">BytePlus ModelArk (международная)</option><option value="https://ark.cn-beijing.volces.com/api/v3">Volcengine Ark (Китай)</option></select></div>
-<div class="wide"><label for="aiVideoModel">Модель Seedance</label><select id="aiVideoModel"><optgroup label="BytePlus ModelArk"><option value="dreamina-seedance-2-0-260128">Seedance 2.0 · dreamina-seedance-2-0-260128</option><option value="seedance-1-5-pro-251215">Seedance 1.5 Pro · seedance-1-5-pro-251215</option><option value="seedance-1-0-pro-250528">Seedance 1.0 Pro · seedance-1-0-pro-250528</option><option value="seedance-1-0-pro-fast-251015">Seedance 1.0 Pro Fast — быстрее, дешевле · seedance-1-0-pro-fast-251015</option><option value="seedance-1-0-lite-i2v-250428">Seedance 1.0 Lite I2V · seedance-1-0-lite-i2v-250428</option></optgroup><optgroup label="Volcengine Ark"><option value="doubao-seedance-2-0-260128">Seedance 2.0 · doubao-seedance-2-0-260128</option><option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro · doubao-seedance-1-5-pro-251215</option><option value="doubao-seedance-1-0-pro-250528">Seedance 1.0 Pro · doubao-seedance-1-0-pro-250528</option><option value="doubao-seedance-1-0-pro-fast-251015">Seedance 1.0 Pro Fast — быстрее, дешевле · doubao-seedance-1-0-pro-fast-251015</option><option value="doubao-seedance-1-0-lite-i2v-250428">Seedance 1.0 Lite I2V · doubao-seedance-1-0-lite-i2v-250428</option></optgroup><option value="__custom">Свой Model ID…</option></select><input id="aiVideoModelCustom" class="ai-custom" autocomplete="off" spellcheck="false" placeholder="Model ID из консоли ModelArk" hidden></div>
+<div class="wide"><label for="aiVideoModel">Модель Seedance</label><select id="aiVideoModel"><option value="dreamina-seedance-2-0-260128">Seedance 2.0 · dreamina-seedance-2-0-260128</option><option value="dreamina-seedance-2-0-fast-260128">Seedance 2.0 Fast · dreamina-seedance-2-0-fast-260128</option><option value="dreamina-seedance-2-0-mini-260615">Seedance 2.0 Mini · dreamina-seedance-2-0-mini-260615</option><option value="__custom">Свой Model ID…</option></select><input id="aiVideoModelCustom" class="ai-custom" autocomplete="off" spellcheck="false" placeholder="Model ID из консоли ModelArk" hidden></div>
 <h3 class="wide">Параметры генерации</h3>
 <div><label for="aiFormat">Формат кадра</label><select id="aiFormat"><option value="9:16">9:16 — вертикальный</option><option value="16:9">16:9 — горизонтальный</option><option value="1:1">1:1 — квадрат</option></select></div>
 <div><label for="aiDuration">Длительность видео, с</label><input id="aiDuration" type="number" min="2" max="15" step="1"></div>
-<div><label for="aiResolution">Разрешение видео</label><select id="aiResolution"><option>1080p</option><option>720p</option><option>480p</option></select></div>
+<div><label for="aiResolution">Разрешение видео</label><select id="aiResolution"><option>720p</option><option>1080p</option><option>480p</option></select></div>
 <div class="wide"><label class="ai-check"><input type="checkbox" id="aiAudio">Звук от модели (Seedance 1.5+; обычно не нужен — озвучка в Resolve)</label><label class="ai-check"><input type="checkbox" id="aiWatermark">Водяной знак Seedance</label><label class="ai-check"><input type="checkbox" id="aiLegacy">Параметры текстом в промпте (для старых моделей Seedance 1.0)</label><p class="muted">Таймлайн .drt остаётся 1920 × 1080: вертикальные видео в Resolve нужно масштабировать или поставить проект 1080 × 1920.</p></div>
+<h3 class="wide">Баланс и расходы Seedance</h3>
+<div class="wide"><p><span class="badge" id="arkBalanceSettings">—</span></p><p class="muted">Ключ ModelArk даёт доступ только к генерации: остаток пакета через него не узнать. Поэтому приложение ведёт учёт само — вычитает стоимость каждого готового видео из суммы пакета по числу токенов, которое возвращает Seedance. Сверяй с консолью BytePlus: Billing → Savings Plans.</p></div>
+<div><label for="aiBudget">Сумма пакета, USD</label><input id="aiBudget" type="number" min="0" step="1" placeholder="Например, 30"></div>
+<div><label for="aiPrice20">Seedance 2.0 · $ за 1 млн токенов</label><input id="aiPrice20" type="number" min="0" step="0.01"></div>
+<div><label for="aiPriceFast">2.0 Fast · $ за 1 млн токенов</label><input id="aiPriceFast" type="number" min="0" step="0.01"></div>
+<div><label for="aiPriceMini">2.0 Mini · $ за 1 млн токенов</label><input id="aiPriceMini" type="number" min="0" step="0.01"></div>
+<div><label for="aiPriceOther">Своя модель · $ за 1 млн токенов</label><input id="aiPriceOther" type="number" min="0" step="0.01"></div>
+<div class="wide"><p class="muted">Цены по умолчанию — для видео из картинки (без входного видео) с акционной скидкой Savings Plan: 2.0 — $7,00 (в 1080p обычно $7,70), Fast — $5,60 −25% = $4,20, Mini — $3,50 −60% = $1,40. Поправь по калькулятору в консоли, если отличаются. Новая цена применяется к следующим видео.</p><div class="button-row"><button type="button" class="small" id="aiLedgerReset">Обнулить расходы</button><button type="button" class="small" id="aiLedgerShow">Показать журнал</button></div><pre id="aiLedgerList" class="ledger" hidden></pre></div>
 <h3 class="wide">Стиль</h3>
 <div class="wide"><label for="aiStyle">Общий стиль кадров <span class="muted">необязательно — подставляется как {style}</span></label><textarea id="aiStyle" rows="2" maxlength="2000" placeholder="Например: тёплый вечерний свет, уютная скандинавская гостиная, малая глубина резкости"></textarea></div>
 <div class="wide"><details class="help"><summary>Шаблоны промптов</summary>
@@ -1046,8 +1057,11 @@ const TPL_VID_PEOPLE='Animate this image. The person calmly and naturally uses t
 const TPL_VID_PRODUCT='Slow, smooth cinematic camera move around the product: a gentle orbit around it OR a slow push-in. The camera is always moving, but never fast or jerky. The product stays still and sharp; its logo and text remain perfectly stable and undistorted, no warping or floating. Keep lighting and environment consistent with the first frame.';
 const FORMAT_SIZE={'9:16':'1024x1536','16:9':'1536x1024','1:1':'1024x1024'};
 const AI_DEFAULTS={openaiKey:'',imageModel:'gpt-image-2',visionModel:'gpt-5-mini',imageQuality:'high',format:'9:16',
- arkKey:'',arkBase:'https://ark.ap-southeast.bytepluses.com/api/v3',videoModel:'seedance-1-5-pro-251215',resolution:'1080p',duration:5,audio:false,watermark:false,legacyFlags:false,
- style:'',tplImage:'',tplVidPeople:'',tplVidProduct:''};
+ arkKey:'',arkBase:'https://ark.ap-southeast.bytepluses.com/api/v3',videoModel:'dreamina-seedance-2-0-260128',resolution:'720p',duration:5,audio:false,watermark:false,legacyFlags:false,
+ style:'',tplImage:'',tplVidPeople:'',tplVidProduct:'',
+ prices:{'dreamina-seedance-2-0-260128':7,'dreamina-seedance-2-0-fast-260128':4.2,'dreamina-seedance-2-0-mini-260615':1.4,other:7},v:2};
+const SEEDANCE_MODELS={'dreamina-seedance-2-0-260128':'Seedance 2.0','dreamina-seedance-2-0-fast-260128':'Seedance 2.0 Fast','dreamina-seedance-2-0-mini-260615':'Seedance 2.0 Mini'};
+const LEDGER_KEY='nastya-ai-ledger-v1';
 const ANALYSIS_FIELDS=[['name','Продукт'],['category','Тип продукта'],['purpose','Для чего используется','wide'],['users','Кто использует'],['places','Где обычно применяют'],['colors','Цвета'],['materials','Материалы'],['shape','Форма'],['logo_present','Логотип есть?'],['logo_location','Где логотип'],['logo_text','Текст логотипа'],['details','Важные детали внешнего вида','wide'],['environment','Окружение для кадров','wide']];
 const ANALYZE_SYSTEM='Ты анализируешь фото продукта для рекламного ролика. Внимательно рассмотри все фото продукта и, если есть, референс окружения. Верни только JSON-объект с ключами: '+
  '"name" (название продукта, с брендом и моделью, если видны), "category" (что это за продукт), "purpose" (для чего используется), "users" (кто им пользуется), "places" (где его обычно применяют), '+
@@ -1058,7 +1072,8 @@ const PLAN_SYSTEM='You plan shots for a product advertising video. For each scen
  'Write "shot": one or two English sentences describing the concrete visual for that scene (setting, action, framing, camera angle) that shows the scene\'s specific benefit. Keep the environment consistent across scenes and vary the framing. '+
  'Return only JSON: {"scenes":[{"n":1,"people":true,"shot":"..."}]} with one entry per scene.';
 const PEOPLE_SYSTEM='Return only JSON {"people": true|false}. true if any person or human body part (including hands) is visible in the image, otherwise false.';
-let aiSettings=(()=>{let o={};try{o=JSON.parse(localStorage.getItem(AI_KEY)||'{}')||{};}catch{}const s={...AI_DEFAULTS,...o};if(!o.format&&FORMAT_SIZE[o.ratio])s.format=o.ratio;if(!FORMAT_SIZE[s.format])s.format='9:16';return s;})();
+let aiSettings=(()=>{let o={};try{o=JSON.parse(localStorage.getItem(AI_KEY)||'{}')||{};}catch{}const s={...AI_DEFAULTS,...o};if(!o.format&&FORMAT_SIZE[o.ratio])s.format=o.ratio;if(!FORMAT_SIZE[s.format])s.format='9:16';s.prices={...AI_DEFAULTS.prices,...(o.prices&&typeof o.prices==='object'?o.prices:{})};
+ if(!(o.v>=2)){s.v=2;s.resolution='720p';if(!SEEDANCE_MODELS[s.videoModel])s.videoModel=AI_DEFAULTS.videoModel;}return s;})();
 let aiProxy='',aiUploadTarget='',aiStop=false,aiRunning=false;
 const imgBusy=new Set(),vidBusy=new Set(),aiMsg=new Map(),aiPolling=new Set(),aiGaveUp=new Set(),aiMedia=new Map();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -1070,7 +1085,8 @@ function normalizeAI(a){
  if(!a||typeof a!=='object')return undefined;
  const str=(v,m)=>typeof v==='string'&&v.length<=m?v:'',bool=v=>v===true||v===false?v:null;
  return {uid:mediaId(a.uid)||uuid(),shot:str(a.shot,2000),planPeople:bool(a.planPeople),people:bool(a.people),imgPrompt:str(a.imgPrompt,8000),vidPrompt:str(a.vidPrompt,8000),
-  image:mediaId(a.image),video:mediaId(a.video),videoUrl:/^https:\/\//.test(a.videoUrl||'')?str(a.videoUrl,4000):'',task:mediaId(a.task)};
+  image:mediaId(a.image),video:mediaId(a.video),videoUrl:/^https:\/\//.test(a.videoUrl||'')?str(a.videoUrl,4000):'',task:mediaId(a.task),vidModel:str(a.vidModel,120),vidRes:str(a.vidRes,10),vidRatio:str(a.vidRatio,10),vidDur:Number.isFinite(a.vidDur)?a.vidDur:0,
+  vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true};
 }
 function normalizeAnalysis(a){
  if(!a||typeof a!=='object'||Array.isArray(a))return null;const out={};
@@ -1256,7 +1272,7 @@ async function createVideoTask(uid){
 }
 async function runVideo(uid){
  if(vidBusy.has(uid)||imgBusy.has(uid))return false;vidBusy.add(uid);setMsg(uid,'vid','run','Отправляю картинку в Seedance…');
- try{const id=await createVideoTask(uid);patchAI(uid,{task:id,video:'',videoUrl:''});vidBusy.delete(uid);pollVideo(uid,id);return true;}
+ try{const id=await createVideoTask(uid);patchAI(uid,{task:id,video:'',videoUrl:'',vidModel:String(aiSettings.videoModel||'').trim(),vidRes:aiSettings.resolution,vidRatio:aiSettings.format,vidDur:Math.round(Number(aiSettings.duration)||5),vidTokens:null,vidCost:null,vidEst:false});vidBusy.delete(uid);pollVideo(uid,id);return true;}
  catch(e){vidBusy.delete(uid);setMsg(uid,'vid','error',e.message);return false;}
 }
 async function pollVideo(uid,id){
@@ -1272,7 +1288,8 @@ async function pollVideo(uid,id){
    const st=d?.status;
    if(st==='succeeded'){
     const url=d.content?.video_url;if(!url)throw Error('Seedance не вернул ссылку на видео.');
-    patchAI(uid,{task:'',videoUrl:url,video:''});setMsg(uid,'vid','run','Видео готово, сохраняю в браузер…');
+    const bill=billTask(id,d,findScene(uid)?.s.ai||{});
+    patchAI(uid,{task:'',videoUrl:url,video:'',...bill});setMsg(uid,'vid','run','Видео готово, сохраняю в браузер…');
     try{const key=await storeMedia('vid',await fetchMedia(url));if(findScene(uid)?.s.ai?.videoUrl===url)patchAI(uid,{video:key});setMsg(uid,'vid','done','Готово за '+elapsed(t0)+'.');}
     catch{setMsg(uid,'vid','done','Видео готово, но сохранить его в браузер не удалось. Скачай по ссылке — она действует около 24 часов.');}
     return;
@@ -1284,6 +1301,42 @@ async function pollVideo(uid,id){
   }
  }catch(e){setMsg(uid,'vid','error',e.message);}
  finally{aiPolling.delete(id);vidBusy.delete(uid);refreshAI(uid);}
+}
+
+// --- Seedance spending ledger ---
+// The ModelArk key cannot read the account or Savings Plan balance, so the app
+// keeps its own ledger: tokens reported by each finished task × the price set
+// in Settings, subtracted from the package amount the user entered.
+const VIDEO_DIMS={'480p':{'16:9':[864,480],'9:16':[480,864],'1:1':[640,640]},'720p':{'16:9':[1280,720],'9:16':[720,1280],'1:1':[960,960]},'1080p':{'16:9':[1920,1080],'9:16':[1080,1920],'1:1':[1440,1440]}};
+function loadLedger(){try{const o=JSON.parse(localStorage.getItem(LEDGER_KEY)||'{}');return {budget:Number.isFinite(o.budget)?o.budget:null,entries:Array.isArray(o.entries)?o.entries.filter(e=>e&&typeof e.task==='string'):[]};}catch{return {budget:null,entries:[]};}}
+let ledger=loadLedger();
+function saveLedger(){try{localStorage.setItem(LEDGER_KEY,JSON.stringify(ledger));}catch{}renderBalance();}
+function modelName(id){return SEEDANCE_MODELS[id]||id||'Seedance';}
+function modelPrice(id){const p=aiSettings.prices||{};return Number(SEEDANCE_MODELS[id]?p[id]:p.other)||0;}
+const fmtUSD=v=>'$'+(v<0.1&&v>0?v.toFixed(3):v.toFixed(2));
+const fmtTok=n=>Math.round(n).toLocaleString('ru-RU');
+function billTask(id,d,ai){
+ const model=d?.model||ai.vidModel||aiSettings.videoModel,res=d?.resolution||ai.vidRes||aiSettings.resolution,ratio=d?.ratio||ai.vidRatio||aiSettings.format,dur=Number(d?.duration)||ai.vidDur||Number(aiSettings.duration)||5;
+ let tokens=Number(d?.usage?.completion_tokens??d?.usage?.total_tokens),est=false;
+ if(!Number.isFinite(tokens)||tokens<=0){const [w,h]=(VIDEO_DIMS[res]||VIDEO_DIMS['720p'])[ratio]||VIDEO_DIMS['720p']['16:9'];tokens=Math.round(w*h*24*dur/1024);est=true;}
+ const cost=tokens/1e6*modelPrice(model);
+ if(!ledger.entries.some(e=>e.task===id)){ledger.entries.push({task:id,model,res,ratio,dur,tokens,cost,est,at:new Date().toISOString(),project:($('name').value||'').slice(0,80)});saveLedger();}
+ return {vidModel:model,vidRes:res,vidRatio:ratio,vidDur:dur,vidTokens:tokens,vidCost:cost,vidEst:est};
+}
+function renderBalance(){
+ const spent=ledger.entries.reduce((a,e)=>a+(Number(e.cost)||0),0),tok=ledger.entries.reduce((a,e)=>a+(Number(e.tokens)||0),0),n=ledger.entries.length;
+ let text,low=false;
+ if(ledger.budget!=null){const left=ledger.budget-spent;low=left<ledger.budget*0.15;text='Seedance: осталось ≈ '+fmtUSD(Math.max(0,left))+' из '+fmtUSD(ledger.budget)+' · потрачено '+fmtTok(tok)+' токенов';}
+ else text=n?'Seedance: потрачено ≈ '+fmtUSD(spent)+' · '+fmtTok(tok)+' токенов':'';
+ $('arkBalance').textContent=text;$('arkBalance').classList.toggle('low',low);
+ $('arkBalanceSettings').textContent=(ledger.budget!=null?'Осталось ≈ '+fmtUSD(Math.max(0,ledger.budget-spent))+' из '+fmtUSD(ledger.budget)+' · ':'Сумма пакета не указана · ')+'потрачено '+fmtUSD(spent)+' · '+fmtTok(tok)+' токенов · видео: '+n;
+ $('arkBalanceSettings').classList.toggle('low',low);
+ if(!$('aiLedgerList').hidden)renderLedgerList();
+}
+function renderLedgerList(){$('aiLedgerList').textContent=ledger.entries.length?ledger.entries.slice().reverse().map(e=>new Date(e.at).toLocaleString('ru-RU',{dateStyle:'short',timeStyle:'short'})+' · '+modelName(e.model)+' · '+e.res+' '+e.ratio+' '+e.dur+' с · '+(e.est?'≈':'')+fmtTok(e.tokens)+' ток. · '+fmtUSD(e.cost)+(e.project?' · '+e.project:'')).join('\n'):'Пока нет готовых видео.';}
+function costLine(a){
+ if(a.vidTokens==null)return '';
+ return modelName(a.vidModel)+' · '+a.vidRes+' · '+a.vidDur+' с — '+(a.vidEst?'≈':'')+fmtTok(a.vidTokens)+' токенов · '+(a.vidEst?'≈':'')+fmtUSD(a.vidCost||0)+(a.vidEst?' (оценка: Seedance не вернул число токенов)':'');
 }
 
 // --- pipeline («Начать») ---
@@ -1413,7 +1466,7 @@ function cardHTML(s,i){
 <div class="cardbody three">
 <div class="col"><div class="col-title"><span>Текст</span><span class="pill" data-pill="text"></span></div><div class="preview" data-preview></div><p class="preview-caption">Схема титра в DaVinci. Без анимации и точной тени.</p><label class="sr-only" for="t-${id}">Текст сцены ${i+1}</label><textarea id="t-${id}" data-text spellcheck="false"></textarea><div class="texttools"><span class="muted" data-metrics></span><div class="button-row"><button type="button" class="small" data-action="highlight">Подобрать выделения</button><button type="button" class="small" data-action="markSelection" title="Выдели слова мышкой в поле текста и нажми эту кнопку">Выделить выбранное</button><button type="button" class="small" data-action="clearHighlight">Без выделений</button><button type="button" class="small" data-action="wrap">На 2 строки</button></div></div><div class="feedback" data-feedback role="status" aria-live="polite" hidden></div><div data-note class="note"></div></div>
 <div class="col"><div class="col-title"><span>Картинка</span><span class="pill" data-pill="img"></span></div><div class="media" data-box="img"></div><p class="ai-msg" data-msg="img" role="status" aria-live="polite"></p><div class="button-row"><button type="button" class="small" data-ai-action="image">Сгенерировать заново</button><button type="button" class="small primary" data-ai-action="video">Сгенерировать видео</button></div><div class="ai-links" data-links="img"></div></div>
-<div class="col"><div class="col-title"><span>Видео</span><span class="pill" data-pill="vid"></span></div><div class="media" data-box="vid"></div><p class="ai-msg" data-msg="vid" role="status" aria-live="polite"></p><div class="ai-links" data-links="vid"></div></div>
+<div class="col"><div class="col-title"><span>Видео</span><span class="pill" data-pill="vid"></span></div><div class="media" data-box="vid"></div><p class="ai-msg" data-msg="vid" role="status" aria-live="polite"></p><p class="vid-cost" data-cost></p><div class="ai-links" data-links="vid"></div></div>
 </div>
 <details class="prompt-box" data-prompts><summary>Промпты сцены — посмотреть и поправить перед отправкой</summary><div class="prompt-grid"><div><label for="pi-${id}">Картинка</label><textarea id="pi-${id}" data-prompt="img" spellcheck="false"></textarea></div><div><label for="pv-${id}">Видео <span class="muted" data-vid-kind></span></label><textarea id="pv-${id}" data-prompt="vid" spellcheck="false"></textarea></div></div><div class="button-row"><button type="button" class="small" data-ai-action="resetPrompts">Вернуть автоматические</button><button type="button" class="linklike" data-ai-action="upload">Загрузить свой кадр вместо генерации</button></div><p class="muted">Правка используется при следующей генерации этой сцены. Пока поле не тронуто, промпт собирается автоматически из шаблона.</p></details>
 <div class="cardbottom"><div><strong class="seconds" data-time>—</strong><span class="muted" data-range></span></div><div class="manual"><label for="m-${id}">Время, с</label><input id="m-${id}" data-manual inputmode="decimal" placeholder="Авто" maxlength="6"><button type="button" class="small" data-action="auto">Авто</button></div></div>`;
@@ -1459,7 +1512,7 @@ async function fillAI(s,card){
  if(src){if(boxV.querySelector('video')?.getAttribute('src')!==src){const v=document.createElement('video');v.src=src;v.controls=true;v.muted=true;v.loop=true;v.playsInline=true;v.preload='metadata';boxV.replaceChildren(v);}boxV.className='media';}
  else empty(boxV,busyV?'Seedance создаёт видео…':a.image?'Ждёт одобрения картинки':'Ожидание',busyV);
  const link=(box,href,text,download)=>{const l=document.createElement('a');l.href=href;l.textContent=text;if(download)l.download=download;else{l.target='_blank';l.rel='noopener noreferrer';}box.append(l);};
- linksI.replaceChildren();linksV.replaceChildren();
+ linksI.replaceChildren();linksV.replaceChildren();card.querySelector('[data-cost]').textContent=(src||a.task)&&!busyV?costLine(a):'';
  if(img)link(linksI,img.url,'Скачать картинку',base+' кадр.'+extOf(img.type));
  if(vid)link(linksV,vid.url,'Скачать видео',base+' видео.'+extOf(vid.type));else if(a.videoUrl)link(linksV,a.videoUrl,'Открыть видео (ссылка ≈24 ч)');
  if(a.task&&!aiPolling.has(a.task)&&!aiGaveUp.has(a.task))pollVideo(u,a.task);
@@ -1527,6 +1580,14 @@ function bindModel(selId,customId,key){
 bindModel('aiImageModel','aiImageModelCustom','imageModel');bindModel('aiVisionModel','aiVisionModelCustom','visionModel');
 const syncVideoModel=bindModel('aiVideoModel','aiVideoModelCustom','videoModel');
 // Model IDs differ by platform: BytePlus "seedance-…"/"dreamina-seedance-2…", Volcengine "doubao-seedance-…".
+for(const [id,key] of [['aiPrice20','dreamina-seedance-2-0-260128'],['aiPriceFast','dreamina-seedance-2-0-fast-260128'],['aiPriceMini','dreamina-seedance-2-0-mini-260615'],['aiPriceOther','other']]){
+ const el=$(id);el.value=aiSettings.prices[key];el.addEventListener('input',()=>{const v=Number(el.value);if(Number.isFinite(v)&&v>=0){aiSettings.prices={...aiSettings.prices,[key]:v};saveAISettings();}});
+}
+$('aiBudget').value=ledger.budget??'';
+$('aiBudget').addEventListener('input',()=>{const v=$('aiBudget').value.trim(),n=Number(v);ledger.budget=v&&Number.isFinite(n)&&n>=0?n:null;saveLedger();});
+$('aiLedgerReset').addEventListener('click',()=>{if(!confirm('Обнулить учёт расходов? Журнал видео очистится, сумма пакета останется.'))return;ledger.entries=[];saveLedger();setStatus('Расходы обнулены.');});
+$('aiLedgerShow').addEventListener('click',()=>{const l=$('aiLedgerList');l.hidden=!l.hidden;$('aiLedgerShow').textContent=l.hidden?'Показать журнал':'Скрыть журнал';if(!l.hidden)renderLedgerList();});
+renderBalance();
 $('aiArkBase').addEventListener('change',()=>{
  const volc=/volces\.com/.test(aiSettings.arkBase),m=aiSettings.videoModel||'',core=m.replace(/^(doubao|dreamina)-/,'');
  const next=volc?'doubao-'+core:(/^seedance-2/.test(core)?'dreamina-':'')+core;
