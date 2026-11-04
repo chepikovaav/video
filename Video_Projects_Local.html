@@ -69,6 +69,12 @@
 .regen-box{display:grid;gap:6px;background:#f7f9f4;border:1px solid #e6ebe0;border-radius:8px;padding:8px}.regen-box textarea{min-height:52px;font-size:12.5px}.regen-box.on{border-color:#c9a25b;background:#fffbf1}
 .pause-check{margin-top:12px!important;font-size:13px}
 .pif{font-size:12.5px;padding:2px 2px 0}
+.stale{position:sticky;top:8px;z-index:40;box-shadow:0 8px 30px #12251822}.stale p{margin:6px 0}
+.orphan-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-top:10px}
+.orphan{border:1px solid var(--line);border-radius:9px;padding:8px;display:grid;gap:6px;font-size:11.5px;background:#fff}
+.orphan img,.orphan video{width:100%;aspect-ratio:1;object-fit:contain;background:#16201c;border-radius:6px}
+.orphan select{min-height:30px;font-size:12px;padding:3px 6px}.orphan .button-row{gap:4px}.orphan .done{color:var(--green);font-weight:650}
+.snap-list{display:grid;gap:6px;margin-top:10px;font-size:12.5px}.snap{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:#fff}
 .faces-check{align-items:flex-start!important;line-height:1.45}.faces-check input{margin-top:2px;flex:none}
 .media.empty.plan{place-items:start;text-align:left;align-content:start;font-size:11.5px;line-height:1.45;overflow:auto}.media.empty.plan b{display:block;color:var(--ink);margin-bottom:4px}
 .video-estimate{font-size:12.5px;background:#f1f5ea;border-radius:7px;padding:8px 11px;margin:0 0 8px}
@@ -85,7 +91,7 @@
 </style></head><body>
 <header class="sitehead"><span class="eyebrow">NASTYA / VIDEO PROJECTS · 06.0</span><span id="launchMode">Проверяю режим запуска…</span></header>
 <div class="layout"><aside class="sidebar"><h2>Постоянные проекты</h2><nav id="profileList" class="profile-list" aria-label="Проекты"></nav><button type="button" id="newProfile">＋ Новый проект</button><button type="button" id="saveWorkspace" class="small">Сохранить все проекты</button><button type="button" id="openTransfer" class="small">Перенос без скачивания</button><p class="side-note">Проект — постоянное оформление.<br>Ролик — отдельный товар и скрипт.<br><br>Сохраняй JSON-копию перед переходом на новую версию. Автосохранение привязано к этому браузеру и может не перенестись с другим HTML-файлом.</p></aside>
-<main><section id="launchWarning" class="notice warn" hidden role="status"><strong>Это встроенный предпросмотр, не локальный редактор.</strong><p>Здесь создание файла и его скачивание — разные действия. Скачивание может быть запрещено окружением. Не открывай blob-ссылку в новой вкладке и не отключай защиту браузера.</p><p>Скачай ZIP из сообщения, распакуй его в Finder и открой <strong>Video_Projects_Local.html</strong> через «Открыть с помощью → Google Chrome» или Safari. Если есть правки, перенеси их кнопкой «Перенос без скачивания» ниже; не закрывай эту страницу до переноса.</p></section><nav class="tabs" role="tablist" aria-label="Разделы"><button type="button" role="tab" data-tab-btn="gen" class="active">Генератор</button><button type="button" role="tab" data-tab-btn="settings">Настройки</button></nav><div id="tabGen"><div class="mainhead"><div><h1>Рекламный ролик<br>по шагам.</h1><p>Скрипт и фото продукта → анализ → картинки → видео → таймлайн DaVinci.</p></div><span class="badge">Редактируемый .drt / 25 fps</span></div><div id="keysNotice" class="notice warn" hidden><strong>Нужен ключ OpenAI.</strong> Укажи ключи API во вкладке «Настройки» — без них анализ и генерация не запустятся.<div class="button-row"><button type="button" class="small" id="keysGo">Открыть настройки</button></div></div>
+<main><section id="staleBanner" class="notice warn stale" hidden role="alert"><strong>Проект изменён в другой вкладке или в другой копии приложения.</strong><p>Чтобы не затереть более новую работу, эта вкладка больше не сохраняет изменения.</p><div class="button-row"><button type="button" class="small primary" id="staleReload">Загрузить свежую версию</button><button type="button" class="small" id="staleForce">Сохранить эту вкладку поверх</button></div></section><section id="orphanNotice" class="notice warn" hidden role="status"><strong id="orphanText"></strong> Их можно посмотреть и вернуть в сцены. <button type="button" class="small" id="orphanGo">Открыть «Восстановление»</button></section><section id="launchWarning" class="notice warn" hidden role="status"><strong>Это встроенный предпросмотр, не локальный редактор.</strong><p>Здесь создание файла и его скачивание — разные действия. Скачивание может быть запрещено окружением. Не открывай blob-ссылку в новой вкладке и не отключай защиту браузера.</p><p>Скачай ZIP из сообщения, распакуй его в Finder и открой <strong>Video_Projects_Local.html</strong> через «Открыть с помощью → Google Chrome» или Safari. Если есть правки, перенеси их кнопкой «Перенос без скачивания» ниже; не закрывай эту страницу до переноса.</p></section><nav class="tabs" role="tablist" aria-label="Разделы"><button type="button" role="tab" data-tab-btn="gen" class="active">Генератор</button><button type="button" role="tab" data-tab-btn="settings">Настройки</button></nav><div id="tabGen"><div class="mainhead"><div><h1>Рекламный ролик<br>по шагам.</h1><p>Скрипт и фото продукта → анализ → картинки → видео → таймлайн DaVinci.</p></div><span class="badge">Редактируемый .drt / 25 fps</span></div><div id="keysNotice" class="notice warn" hidden><strong>Нужен ключ OpenAI.</strong> Укажи ключи API во вкладке «Настройки» — без них анализ и генерация не запустятся.<div class="button-row"><button type="button" class="small" id="keysGo">Открыть настройки</button></div></div>
 <section class="panel" aria-label="Текущий проект"><div class="profilebar"><div><h2 id="projectHeading">NXA</h2><span class="badge" id="profileBadge"></span></div><button id="editProfile" type="button" class="small">Настройки проекта</button></div><p class="muted" id="profileSummary"></p><div id="profileWarning" class="notice warn" hidden></div>
 <div class="jobrow"><div><label for="jobSelect">Ролики этого проекта</label><select id="jobSelect"></select></div><button id="newJob" type="button">＋ Новый ролик</button><button id="duplicateJob" type="button">Копия ролика</button></div>
 <div class="settings"><div><label for="name">Название ролика и таймлайна</label><input id="name" maxlength="120" autocomplete="off" placeholder="Например, Emerson EVP-2502"><div class="filename">Файл: <strong id="fileName"></strong></div></div><div><label for="mode">Сборка</label><select id="mode"><option value="flexible">Новый таймлайн титров · автохронометраж</option><option value="original">Исходный NXA-монтаж · 7 сцен</option></select></div><div><label for="factor">Запас времени на чтение</label><select id="factor"><option value="1">Как в NXA-референсе</option><option value="1.15">На 15% больше</option><option value="1.3">На 30% больше</option></select></div></div><p class="mode-note" id="modeNote"></p>
@@ -147,6 +153,10 @@
 <label for="tplVidProduct" style="margin-top:12px">Видео — людей нет</label><textarea id="tplVidProduct" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplVidProductReset">По умолчанию</button></div></details></div>
 <h3 class="wide">Соединение</h3>
 <div class="wide"><p><span class="badge" id="aiConn">Проверяю соединение…</span></p><p class="muted">OpenAI обычно отвечает браузеру напрямую. Если появляется «Нет соединения» (чаще у Seedance), запусти рядом с этим HTML <strong>«Запустить AI-сервер.command»</strong> или <code>python3 ai_server.py</code> и нажми «Проверить соединение». Страницу можно оставить открытой как файл.</p><div class="button-row"><button type="button" class="small" id="aiCheck">Проверить соединение</button><button type="button" class="small" id="aiClean">Очистить неиспользуемые файлы</button></div></div>
+<h3 class="wide" id="recoveryTitle">Восстановление</h3>
+<div class="wide"><p class="muted">Картинки, видео и фото из браузера не удаляются, даже если проект перестал на них ссылаться (например, другая вкладка сохранила более старую версию). Здесь их можно найти и вернуть в сцены. Ещё приложение само хранит копии проекта: последние 30 состояний, не чаще раза в 3 минуты.</p>
+<div class="button-row"><button type="button" class="small primary" id="orphanScan">Найти непривязанные картинки и видео</button><button type="button" class="small" id="snapShow">Показать сохранённые копии проекта</button></div>
+<p class="muted" id="orphanStatus" role="status"></p><div id="orphanGrid" class="orphan-grid"></div><div id="snapList" class="snap-list" hidden></div></div>
 <h3 class="wide">Сброс</h3><div class="wide"><p class="muted">Все ключи, модели и параметры сохраняются сразу при изменении и подставляются при следующем открытии этой страницы в этом браузере.</p><div class="button-row"><button type="button" class="small" id="aiResetSettings">Сбросить настройки</button></div></div>
 </div></section></div>
 </main></div>
@@ -852,7 +862,11 @@ function stash(){
  workspace.activeProfileId=currentProfileId;workspace.activeJobId=currentJobId;workspace.lastJobByProfile[currentProfileId]=currentJobId;
 }
 function persist(){
- clearTimeout(persistTimer);stash();mirrorWorkspace();try{localStorage.setItem(STORAGE_KEY,JSON.stringify(workspace));try{localStorage.setItem(STORAGE_KEY+':savedAt',String(Date.now()));}catch{}storageOK=true;$('storageStatus').textContent='Изменения сохранены в этом браузере';$('storageStatus').classList.remove('error');}
+ clearTimeout(persistTimer);stash();
+ // Another tab or another copy of the app saved after this one: do not overwrite it.
+ if(!tabStale&&lastWritten!==null){let cur=null;try{cur=localStorage.getItem(STORAGE_KEY);}catch{}if(cur!==null&&cur!==lastWritten)markTabStale();}
+ if(tabStale){$('storageStatus').textContent='Не сохранено: проект изменён в другой вкладке';$('storageStatus').classList.add('error');return;}
+ mirrorWorkspace();try{const json=JSON.stringify(workspace);localStorage.setItem(STORAGE_KEY,json);lastWritten=json;try{localStorage.setItem(STORAGE_KEY+':savedAt',String(Date.now()));}catch{}storageOK=true;$('storageStatus').textContent='Изменения сохранены в этом браузере';$('storageStatus').classList.remove('error');}
  catch{storageOK=false;$('storageStatus').textContent='Основное хранилище браузера недоступно — проект сохраняется копией в IndexedDB. На всякий случай сохрани JSON';$('storageStatus').classList.add('error');}
 }
 function markDirty(){stash();clearTimeout(persistTimer);$('storageStatus').textContent='Сохраняю…';$('storageStatus').classList.remove('error');persistTimer=setTimeout(persist,250);}
@@ -1063,7 +1077,13 @@ async function importFile(file){
 }
 $('openImport').addEventListener('click',()=>$('importFile').click());
 $('importFile').addEventListener('change',async()=>{const f=$('importFile').files[0];if(!f)return;busy=true;$('openImport').disabled=true;setStatus('Читаю выбранный файл…');try{const message=await importFile(f);$('importResult').hidden=false;$('importResult').textContent=message;$('importResult').classList.remove('error');setStatus(message);}catch(e){$('importResult').hidden=false;$('importResult').textContent=e.message;$('importResult').classList.add('error');setStatus(e.message,true);}finally{$('importFile').value='';busy=false;$('openImport').disabled=false;refreshSummary();}});
-window.addEventListener('pagehide',persist);
+let tabStale=false,lastWritten=null;
+function markTabStale(){if(tabStale)return;tabStale=true;clearTimeout(persistTimer);try{clearTimeout(mirrorTimer);}catch{}$('staleBanner').hidden=false;}
+// Older copies of the app do not write the timestamp, but every write fires a
+// storage event in the other tabs of this browser.
+// Only a different project content counts: a tab that just opened rewrites the same data.
+window.addEventListener('storage',e=>{if(e.key===STORAGE_KEY&&e.newValue!==null&&e.newValue!==lastWritten)markTabStale();});
+window.addEventListener('pagehide',()=>{if(!tabStale)persist();});
 // ===== AI ad generator =====
 // Pipeline: product photos -> vision analysis (editable JSON) -> script split
 // into DaVinci scenes -> per-scene plan (person or product-only) -> frames via
@@ -1474,19 +1494,27 @@ function costLine(a){
 // newer copy wins, so a full or cleared localStorage does not lose the project.
 const WS_BACKUP_KEY='__workspace__';let mirrorReady=false,mirrorTimer=null;
 function mirrorWorkspace(){
- if(!mirrorReady||!workspace)return;clearTimeout(mirrorTimer);
- mirrorTimer=setTimeout(()=>{try{mediaDB.put(WS_BACKUP_KEY,{savedAt:Date.now(),data:JSON.stringify(workspace)}).catch(()=>{});}catch{}},300);
+ if(!mirrorReady||!workspace||tabStale)return;clearTimeout(mirrorTimer);
+ mirrorTimer=setTimeout(()=>{try{const data=JSON.stringify(workspace),now=Date.now();mediaDB.put(WS_BACKUP_KEY,{savedAt:now,data}).catch(()=>{});maybeSnapshot(data,now);}catch{}},300);
 }
+const SNAP_PREFIX='__snap_',SNAP_MAX=30,SNAP_EVERY=3*60e3;let lastSnapAt=0;
+async function saveSnapshot(data,at=Date.now(),reason=''){
+ try{let snaps=(await mediaDB.keys()).filter(k=>String(k).startsWith(SNAP_PREFIX)).sort();
+  if(snaps.length&&(await mediaDB.get(snaps[snaps.length-1]))?.data===data){lastSnapAt=at;return;}
+  await mediaDB.put(SNAP_PREFIX+String(at).padStart(14,'0'),{at,reason,data});lastSnapAt=at;
+  snaps=(await mediaDB.keys()).filter(k=>String(k).startsWith(SNAP_PREFIX)).sort();for(const k of snaps.slice(0,Math.max(0,snaps.length-SNAP_MAX)))await mediaDB.del(k);}catch{}
+}
+function maybeSnapshot(data,now){if(now-lastSnapAt>=SNAP_EVERY)saveSnapshot(data,now);}
 async function restoreWorkspaceBackup(){
  try{
   const b=await mediaDB.get(WS_BACKUP_KEY);
   if(b&&typeof b.data==='string'&&(!hadLocal||initialError||b.savedAt>localSavedAt+2000)){
-   const ws=validateWorkspace(JSON.parse(b.data));workspace=ws;loadJob(workspace.activeJobId);
-   try{localStorage.setItem(STORAGE_KEY,JSON.stringify(workspace));localStorage.setItem(STORAGE_KEY+':savedAt',String(b.savedAt));}catch{}
+   const ws=validateWorkspace(JSON.parse(b.data));if(hadLocal&&!initialError)await saveSnapshot(JSON.stringify(workspace),Date.now(),'до восстановления из копии');workspace=ws;loadJob(workspace.activeJobId);
+   try{const json=JSON.stringify(workspace);localStorage.setItem(STORAGE_KEY,json);lastWritten=json;localStorage.setItem(STORAGE_KEY+':savedAt',String(b.savedAt));}catch{}
    setStatus('Проект восстановлен из копии в IndexedDB — всё на месте.');
   }
  }catch{}
- mirrorReady=true;mirrorWorkspace();
+ mirrorReady=true;await saveSnapshot(JSON.stringify(workspace),Date.now(),'при открытии');mirrorWorkspace();scanOrphans(true);
 }
 
 // --- pipeline («Начать») ---
@@ -1874,11 +1902,74 @@ $('aiResetSettings').addEventListener('click',()=>{
  location.reload();
 });
 $('aiCheck').addEventListener('click',async()=>{const p=await checkProxy();refreshKeysNotice();setStatus(p?'AI-сервер найден: запросы пойдут через него.':'AI-сервер не найден: запросы пойдут напрямую из браузера.');});
+function addUsedKeys(used,ws,extraScenes=[]){
+ for(const list of [...extraScenes,...(ws?.jobs||[]).map(j=>j.scenes||[])])for(const s of list)for(const v of [s.ai||{},...(s.ai?.history||[])]){if(v.image)used.add(v.image);if(v.video)used.add(v.video);}
+ for(const j of ws?.jobs||[])for(const k of [...(j.aiPhotos||[]),...(j.aiEnvRefs||[]),j.aiRef,j.aiEnvRef].filter(Boolean))used.add(k);
+}
+function usedMediaKeys(){stash();const used=new Set();addUsedKeys(used,workspace,[scenes,...undoStack.map(u=>u.scenes)]);return used;}
+async function orphanKeys(){const used=usedMediaKeys();return (await mediaDB.keys()).map(String).filter(k=>!k.startsWith('__')&&!used.has(k));}
+const ORPHAN_KIND=k=>k.startsWith('vid-')?'video':k.startsWith('photo-')||k.startsWith('ref-')?'photo':k.startsWith('env-')?'env':'image';
+async function scanOrphans(quiet=false){
+ let keys=[];try{keys=await orphanKeys();}catch{return;}
+ const n={image:0,video:0,photo:0,env:0};keys.forEach(k=>n[ORPHAN_KIND(k)]++);
+ const parts=[n.image&&'картинок: '+n.image,n.video&&'видео: '+n.video,n.photo+n.env&&'фото: '+(n.photo+n.env)].filter(Boolean);
+ $('orphanNotice').hidden=!(n.image+n.video);$('orphanText').textContent='В браузере есть файлы, не привязанные к проекту: '+parts.join(', ')+'.';
+ if(quiet)return keys;
+ const grid=$('orphanGrid');grid.replaceChildren();
+ $('orphanStatus').textContent=keys.length?'Найдено: '+parts.join(', ')+'. Порядок случайный — дат у файлов нет. Можно скачать или вернуть в сцену текущего ролика.':'Непривязанных файлов нет — всё, что есть в браузере, уже в проектах.';
+ for(const k of keys){
+  const m=await mediaURL(k);if(!m)continue;const kind=ORPHAN_KIND(k),box=document.createElement('div');box.className='orphan';
+  const media=kind==='video'?Object.assign(document.createElement('video'),{src:m.url,controls:true,muted:true,preload:'metadata'}):Object.assign(new Image(),{src:m.url,alt:''});
+  const label=document.createElement('span');label.textContent={image:'Картинка сцены',video:'Видео',photo:'Фото продукта',env:'Референс окружения'}[kind];
+  const row=document.createElement('div');row.className='button-row';
+  const dl=document.createElement('a');dl.href=m.url;dl.download=k+'.'+extOf(m.type);dl.textContent='Скачать';dl.className='small';row.append(dl);
+  box.append(media,label);
+  if(kind==='image'||kind==='video'){
+   const sel=document.createElement('select');scenes.forEach((x,i)=>{const o=document.createElement('option');o.value=i;o.textContent='Сцена '+(i+1)+(x.ai?.image?'':' (без картинки)');sel.append(o);});
+   const b=document.createElement('button');b.type='button';b.className='small';b.textContent='Вернуть в сцену';
+   b.addEventListener('click',()=>{const x=scenes[Number(sel.value)];if(!x)return;const uid=aiOf(x).uid;
+    if(kind==='image')pushVersion(uid,{image:k,video:'',videoUrl:'',task:'',people:null,vidModel:'',vidTokens:null,vidCost:null,vidEst:false,vidAudio:false,note:'восстановлено',regen:false,feedback:''});
+    else patchAI(uid,{video:k,videoUrl:'',task:''});
+    persist();refreshAI(uid);box.querySelector('.done')||box.append(Object.assign(document.createElement('span'),{className:'done',textContent:'Возвращено в сцену '+(Number(sel.value)+1)}));scanOrphans(true);});
+   box.append(sel);row.append(b);
+  }else{
+   const b=document.createElement('button');b.type='button';b.className='small';b.textContent=kind==='env'?'В референсы':'В фото продукта';
+   b.addEventListener('click',()=>{const j=job(),f=kind==='env'?'aiEnvRefs':'aiPhotos';if(j[f].length>=MAX_PHOTOS){setStatus('Уже '+MAX_PHOTOS+' фото — удали лишние.',true);return;}j[f].push(k);persist();renderPhotos();box.append(Object.assign(document.createElement('span'),{className:'done',textContent:'Добавлено'}));scanOrphans(true);});
+   row.append(b);
+  }
+  box.append(row);grid.append(box);
+ }
+ return keys;
+}
+async function renderSnapshots(){
+ const list=$('snapList');list.hidden=false;list.replaceChildren();
+ let keys=[];try{keys=(await mediaDB.keys()).map(String).filter(k=>k.startsWith(SNAP_PREFIX)).sort().reverse();}catch{}
+ if(!keys.length){list.textContent='Копий пока нет — они появятся по ходу работы.';return;}
+ for(const k of keys){
+  const snap=await mediaDB.get(k);if(!snap?.data)continue;let ws;try{ws=JSON.parse(snap.data);}catch{continue;}
+  const jobs=ws.jobs||[],sc=jobs.reduce((a,j)=>a+(j.scenes||[]).length,0),im=jobs.reduce((a,j)=>a+(j.scenes||[]).filter(x=>x.ai?.image).length,0),vd=jobs.reduce((a,j)=>a+(j.scenes||[]).filter(x=>x.ai?.video||x.ai?.videoUrl).length,0);
+  const row=document.createElement('div');row.className='snap';
+  const t=document.createElement('span');t.textContent=new Date(snap.at).toLocaleString('ru-RU',{dateStyle:'short',timeStyle:'short'})+' — роликов: '+jobs.length+', сцен: '+sc+', картинок: '+im+', видео: '+vd+(snap.reason?' · '+snap.reason:'');
+  const b=document.createElement('button');b.type='button';b.className='small';b.textContent='Добавить ролики копией';
+  b.addEventListener('click',()=>{if(!confirm('Добавить ролики из этой копии к текущим? Текущие ролики не изменятся — копия появится отдельными роликами в списке «Ролики этого проекта».'))return;try{const msg=mergeWorkspace(ws);setStatus(msg);showTab('gen');}catch(e){setStatus(e.message,true);}});
+  row.append(t,b);list.append(row);
+ }
+}
+$('orphanScan').addEventListener('click',()=>scanOrphans(false));
+$('snapShow').addEventListener('click',renderSnapshots);
+$('orphanGo').addEventListener('click',()=>{showTab('settings');$('recoveryTitle').scrollIntoView({behavior:'smooth'});scanOrphans(false);});
+$('staleReload').addEventListener('click',()=>location.reload());
+$('staleForce').addEventListener('click',()=>{if(!confirm('Сохранить то, что открыто в этой вкладке, поверх версии из другой вкладки? Версия из другой вкладки сохранится копией в «Восстановление».'))return;
+ try{const other=localStorage.getItem(STORAGE_KEY);if(other)saveSnapshot(other,Date.now(),'перед сохранением поверх из другой вкладки');}catch{}
+ tabStale=false;lastWritten=null;$('staleBanner').hidden=true;persist();setStatus('Сохранено из этой вкладки.');});
 $('aiClean').addEventListener('click',async()=>{
- try{stash();const used=new Set();
-  for(const list of [scenes,...workspace.jobs.map(j=>j.scenes),...undoStack.map(u=>u.scenes)])for(const s of list)for(const v of [s.ai||{},...(s.ai?.history||[])]){if(v.image)used.add(v.image);if(v.video)used.add(v.video);}
-  for(const j of workspace.jobs){for(const k of [...(j.aiPhotos||[]),...(j.aiEnvRefs||[])])used.add(k);}
-  let n=0;for(const k of await mediaDB.keys())if(!used.has(k)&&!String(k).startsWith('__')){await mediaDB.del(k);aiMedia.delete(k);n++;}
+ try{
+  const used=usedMediaKeys();
+  for(const k of (await mediaDB.keys()).map(String).filter(k=>k.startsWith(SNAP_PREFIX))){try{const sn=await mediaDB.get(k);addUsedKeys(used,JSON.parse(sn.data));}catch{}}
+  const orphans=(await mediaDB.keys()).map(String).filter(k=>!k.startsWith('__')&&!used.has(k));
+  if(!orphans.length){setStatus('Удалять нечего: все файлы привязаны к проектам или сохранённым копиям.');return;}
+  if(!confirm('Удалить навсегда '+orphans.length+' файлов, которые не привязаны ни к одному ролику и ни к одной сохранённой копии? Сначала проверь «Восстановление» — возможно, там нужные картинки или видео.'))return;
+  let n=0;for(const k of orphans){await mediaDB.del(k);aiMedia.delete(k);n++;}
   setStatus('Удалено неиспользуемых файлов: '+n+'.');
  }catch(e){setStatus(e.message,true);}
 });
