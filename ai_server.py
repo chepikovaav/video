@@ -620,14 +620,20 @@ def codex_image(fields, refs):
             shape = "vertical" if h > w else "horizontal" if w > h else "square"
         except ValueError:
             shape = "as described"
-        prompt = ("Use your built-in image generation tool ($imagegen) exactly once to create one image. "
-                  "Do not write scripts and do not draw the image with code. "
-                  + (f"Base it on the {len(names)} attached reference image(s): pass num_last_images_to_include:{len(names)} "
-                     "in the image tool call so they reach the tool; the product must look exactly like in the references. "
-                     if names else "")
-                  + f"Image size: {size} ({shape}). "
-                  "Save the generated image as out.png in the current working directory, then reply only with the file name."
-                  "\n\nImage description:\n" + (fields.get("prompt") or ""))
+        # Codex is an agent: left alone it rewrites and shortens the prompt before calling its image
+        # tool, and the exact rules about the product's logo and inscriptions get lost. So the prompt
+        # goes in markers and must be passed on verbatim; the log below shows what really reached the tool.
+        body = (fields.get("prompt") or "").strip() + f"\nImage size: {size} ({shape})."
+        prompt = ("Use your built-in image generation tool ($imagegen) exactly once to create one image.\n"
+                  "The tool's prompt must be EXACTLY the text between <<<PROMPT and PROMPT>>> below, copied character "
+                  "for character: do not shorten, summarize, rephrase, reorder, translate or add anything — every "
+                  "sentence about the product, its logo and its inscriptions matters.\n"
+                  + (f"Pass num_last_images_to_include:{len(names)} so all {len(names)} attached images reach the tool "
+                     "in the attached order (the prompt refers to them as reference image 1, 2, …).\n" if names else "")
+                  + f"If the tool has a size or aspect setting, use {size}.\n"
+                  "Do not write scripts and do not draw the image with code. After the call, save the generated image "
+                  "as out.png in the current working directory and reply only with the file name.\n\n"
+                  "<<<PROMPT\n" + body + "\nPROMPT>>>")
         args = ["--json", "-s", "workspace-write"]
         for path in names:
             args += ["-i", path]
@@ -639,13 +645,66 @@ def codex_image(fields, refs):
         except CodexError as e:  # the picture may exist even if the turn ended badly
             error = e
         found = find_generated(work, log, started, set(names))
+        call = tool_call_info(log)
+        if call:
+            sent, n_refs = call.get("prompt", ""), call.get("refs")
+            full = sent.strip().startswith(body[:200].strip()) and len(sent) >= len(body) * 0.97
+            print(f"  Codex → картинка: промпт {'передан полностью' if full else 'ИЗМЕНЁН агентом'} "
+                  f"({len(sent)} из {len(body)} символов), референсов: {n_refs if n_refs is not None else '?'} из {len(names)}")
         if not found:
             raise error or CodexError("Codex не создал картинку: " + log_tail(log))
         with open(found, "rb") as f:
             data = f.read()
-        return {"created": int(time.time()), "data": [{"b64_json": base64.b64encode(data).decode()}]}
+        return {"created": int(time.time()), "data": [{"b64_json": base64.b64encode(data).decode()}],
+                "codex": {"toolPrompt": (call or {}).get("prompt", "")[:20000], "refsSent": len(names),
+                          "refsUsed": (call or {}).get("refs")}}
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def tool_call_info(log):
+    """What Codex really passed to its image tool, read from the session rollout (best effort)."""
+    try:
+        with open(log, encoding="utf-8", errors="replace") as f:
+            m = re.search(r'"thread_id"\s*:\s*"([^"]+)"', f.read())
+    except OSError:
+        return None
+    if not m:
+        return None
+    files = glob.glob(os.path.join(CODEX_HOME, "sessions", "**", f"*{m.group(1)}*.jsonl"), recursive=True)
+    best = None
+
+    def visit(node):
+        nonlocal best
+        if isinstance(node, dict):
+            for key in ("arguments", "input"):
+                raw = node.get(key)
+                if isinstance(raw, str) and "prompt" in raw:
+                    try:
+                        raw = json.loads(raw)
+                    except ValueError:
+                        continue
+                if isinstance(raw, dict) and isinstance(raw.get("prompt"), str):
+                    if not best or len(raw["prompt"]) > len(best["prompt"]):
+                        best = {"prompt": raw["prompt"], "refs": raw.get("num_last_images_to_include")}
+            for v in node.values():
+                visit(v)
+        elif isinstance(node, list):
+            for v in node:
+                visit(v)
+
+    for path in files[:1]:
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if '"prompt' in line:
+                        try:
+                            visit(json.loads(line))
+                        except ValueError:
+                            pass
+        except OSError:
+            pass
+    return best
 
 
 def find_generated(work, log, started, exclude):
