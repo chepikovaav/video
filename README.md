@@ -34,3 +34,26 @@
 Запусти рядом с HTML **`Запустить AI-сервер.command`** (или `python3 ai_server.py`) и нажми
 «Проверить соединение» в настройках. Сервер слушает только `127.0.0.1:8787`, нужен только Python 3.
 Ключи можно задать и переменными окружения `OPENAI_API_KEY` / `ARK_API_KEY`.
+
+## Сервер: Ubuntu + Cloudflare
+
+Схема: `браузер → Cloudflare (Access + HTTPS) → Cloudflare Tunnel → 127.0.0.1:8787 (ai_server.py)`.
+Порты на сервере открывать не нужно, nginx и сертификаты не нужны.
+
+1. **Файлы на сервер** (или `git clone`):
+   `scp -r Video_Projects_Local.html ai_server.py deploy user@SERVER:~/video/`
+2. **AI-сервер как служба:** `cd ~/video && sudo bash deploy/install.sh https://video.ваш-домен.com`
+   (ставит python3, кладёт файлы в `/opt/video`, создаёт `/etc/video-ai.env` и службу `video-ai`).
+3. **Туннель:** Cloudflare → Zero Trust → Networks → Tunnels → Create tunnel (cloudflared) →
+   выполнить на сервере показанную команду `sudo cloudflared service install …` →
+   Public hostname: `video.ваш-домен.com`, Service: `HTTP` · `localhost:8787`.
+4. **Закрыть доступ (обязательно):** Zero Trust → Access → Applications → Add → Self-hosted →
+   домен `video.ваш-домен.com`, политика Allow → Emails: свои адреса. Вход по коду из почты.
+5. Открыть `https://video.ваш-домен.com` → «Настройки» → «Проверить соединение».
+
+Обновить после правок: снова `sudo bash deploy/install.sh https://video.ваш-домен.com`
+(`/etc/video-ai.env` не перезаписывается). Логи: `journalctl -u video-ai -f`.
+
+Ключи можно вводить в браузере (как локально) или прописать в `/etc/video-ai.env` —
+тогда ими пользуется любой, кто прошёл Access. Cloudflare обрывает запросы дольше 100 с (ошибка 524):
+Seedance это не касается, а очень тяжёлая картинка OpenAI в высоком качестве может не успеть — тогда повторить.

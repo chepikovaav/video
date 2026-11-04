@@ -1,0 +1,20 @@
+# /etc/systemd/system/video-ai.service
+[Unit]
+Description=Video Projects AI server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=video
+WorkingDirectory=/opt/video
+EnvironmentFile=/etc/video-ai.env
+ExecStart=/usr/bin/python3 /opt/video/ai_server.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

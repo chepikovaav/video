@@ -3,7 +3,8 @@
 
 Forwards AI requests from the page to OpenAI (frames) and Seedance / ModelArk
 (video), because browsers may block direct calls to these APIs (CORS).
-Listens only on 127.0.0.1. No dependencies beyond the Python standard library.
+Listens only on 127.0.0.1 (put Cloudflare Tunnel in front of it on a server,
+see deploy/). No dependencies beyond the Python standard library.
 
     python3 ai_server.py            # then press «Проверить соединение» in the page
 
@@ -26,7 +27,10 @@ PAGE = "Video_Projects_Local.html"
 OPENAI = "https://api.openai.com/v1"
 ARK_HOSTS = (".bytepluses.com", ".volces.com", ".byteplus.com", ".volccdn.com")
 MEDIA_HOSTS = ARK_HOSTS + (".openai.com", ".oaiusercontent.com", ".blob.core.windows.net")
-ALLOWED_ORIGINS = {"null", f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"}
+HOST = os.environ.get("AI_SERVER_HOST", "127.0.0.1")
+# On a server behind Cloudflare: AI_ALLOWED_ORIGINS=https://video.example.com
+EXTRA_ORIGINS = {o.strip().rstrip("/") for o in os.environ.get("AI_ALLOWED_ORIGINS", "").split(",") if o.strip()}
+ALLOWED_ORIGINS = {"null", f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"} | EXTRA_ORIGINS
 TIMEOUT = 600
 
 
@@ -169,9 +173,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def main():
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    url = f"http://127.0.0.1:{PORT}/"
+    server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
+    url = f"http://{HOST}:{PORT}/"
     print(f"AI-сервер запущен: {url}")
+    if EXTRA_ORIGINS:
+        print("Разрешённые адреса страницы: " + ", ".join(sorted(EXTRA_ORIGINS)))
     print("Оставь это окно открытым, пока генерируешь кадры и видео. Остановить: Ctrl+C.")
     if "--open" in sys.argv:
         webbrowser.open(url + PAGE)

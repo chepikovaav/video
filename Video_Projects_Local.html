@@ -1109,10 +1109,10 @@ async function prepareUpload(file){
 // --- network ---
 function arkBase(){const v=String(aiSettings.arkBase||'').trim().replace(/\/+$/,'');if(!/^https:\/\/[\w.-]+(?::\d+)?(\/[\w./-]*)?$/.test(v))throw Error('Адрес платформы Seedance должен начинаться с https://');return v;}
 async function checkProxy(){
- const candidates=[...new Set([/^https?:$/.test(location.protocol)&&/^(localhost|127\.0\.0\.1)$/.test(location.hostname)?location.origin:'',AI_SERVER].filter(Boolean))];
+ const candidates=[...new Set([/^https?:$/.test(location.protocol)?location.origin:'',AI_SERVER].filter(Boolean))];
  aiProxy='';
  for(const base of candidates){try{const c=new AbortController(),t=setTimeout(()=>c.abort(),1500);const r=await fetch(base+'/api/health',{signal:c.signal});clearTimeout(t);if(r.ok&&(await r.json()).ok){aiProxy=base;break;}}catch{}}
- $('aiConn').textContent=aiProxy?'Локальный AI-сервер запущен — запросы идут через него':'Локальный AI-сервер не найден — запросы идут напрямую из браузера';
+ $('aiConn').textContent=aiProxy?'AI-сервер запущен ('+aiProxy.replace(/^https?:\/\//,'')+') — запросы идут через него':'AI-сервер не найден — запросы идут напрямую из браузера';
  $('aiConn').classList.toggle('pending',!aiProxy);
  return aiProxy;
 }
