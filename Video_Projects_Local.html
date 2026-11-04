@@ -69,6 +69,8 @@
 .regen-box{display:grid;gap:6px;background:#f7f9f4;border:1px solid #e6ebe0;border-radius:8px;padding:8px}.regen-box textarea{min-height:52px;font-size:12.5px}.regen-box.on{border-color:#c9a25b;background:#fffbf1}
 .pause-check{margin-top:12px!important;font-size:13px}
 .pif{font-size:12.5px;padding:2px 2px 0}
+.upload-own{align-self:flex-start}.vregen label{font-size:11.5px;margin:0}
+.media.dropping{outline:3px dashed var(--green);outline-offset:-6px}
 .stale{position:sticky;top:8px;z-index:40;box-shadow:0 8px 30px #12251822}.stale p{margin:6px 0}
 .orphan-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-top:10px}
 .orphan{border:1px solid var(--line);border-radius:9px;padding:8px;display:grid;gap:6px;font-size:11.5px;background:#fff}
@@ -1095,7 +1097,7 @@ const AI_KEY='nastya-ai-settings-v1',AI_SERVER='http://127.0.0.1:8787',MAX_PHOTO
 const TPL_IMAGE='Photorealistic commercial advertising photograph for a {product} ad. This scene communicates: "{scene_text}". The image must evoke this feeling: {feeling} — through a real-life situation, not through text. Shot plan: {shot_plan}. Location: {environment}.\nUSER CHANGES (highest priority): {user_feedback}\nVARIETY: this image must be clearly different in meaning, action, location and composition from the other scenes of this ad: {other_scenes}. Do not repeat their situation, pose or framing. Do not default to hands holding an object next to the product.\n{PRODUCT_BLOCK}\nPEOPLE: real, natural-looking humans — visible skin pores and natural skin texture, fine hair strands and realistic hair texture, natural imperfections, realistic hands with correct fingers, natural poses and emotions. No plastic, airbrushed, waxy or CGI look.\nSINGLE FRAME: one continuous photograph of one moment from one camera. No split screen, no collage, no grid, no diptych or triptych, no before/after comparison, no picture-in-picture, no inset close-ups, no multiple panels or dividing lines.\nIMAGE: clean photo only. No text, captions, letters, numbers, labels, UI elements, icons, arrows, frames, watermarks, glows, sparkles, light rays, lens flares or any other graphic effects or overlays. The only text allowed is what physically exists on real objects in the scene, kept sharp and undistorted.\nProfessional natural lighting, real camera look (shallow depth of field where appropriate), clean, atmospheric composition. Style: {style}.';
 const TPL_BLOCK_IN='ENVIRONMENT: the product is placed in a real, lived-in environment that fits the scene. Never on a white, plain, seamless or studio background, never a cut-out packshot.\nPRODUCT: must look exactly like the reference images — identical shape, proportions, colors, materials, label and logo. Do not stretch, squash, enlarge or simplify it. Its scale must be realistic relative to people, hands and surrounding objects. The product is a clear focal point of the image.\nDO NOT INVENT: depict only features visible in the reference images: {known_features}. These are unknown and must NOT be shown or guessed: {unknown_features}. Never add slots, ports, buttons, lids, compartments or mechanisms that are not in the references. Never show the product opened, disassembled or from a side not shown in the references in close-up. If an interaction is unknown, show the result or emotion instead — never the mechanism itself.';
 const TPL_BLOCK_OUT='NO PRODUCT IN FRAME: the product itself must NOT appear in this image, not even partially or in the background. Instead, show a moment from the world around the product — people, hands, objects, places or activities connected to it — that conveys the feeling of the scene. The setting must stay consistent with the rest of the ad (same era, mood and type of environment). Focus on one clear, emotional subject.';
-const MAX_VERSIONS=12,VERSION_FIELDS=['image','video','videoUrl','vidModel','vidRes','vidRatio','vidDur','vidTokens','vidCost','vidEst','vidAudio','people','shot','planPeople','location','framing','note','feeling','productInFrame'];
+const MAX_VERSIONS=12,VERSION_FIELDS=['image','video','videoUrl','vidModel','vidRes','vidRatio','vidDur','vidTokens','vidCost','vidEst','vidAudio','people','shot','planPeople','location','framing','note','feeling','productInFrame','vnote'];
 const TPL_VID_PEOPLE='Animate this image. The person calmly and naturally continues the action shown in the first frame at a normal, realistic pace. No sudden or fast movements. Slow, smooth camera movement throughout (gentle dolly or slight pan). [[The product keeps its exact shape, proportions and size; nothing on it opens, slides out, lights up or changes; no new parts appear; nothing is inserted into it unless it is clearly shown in the first frame. Its logo stays perfectly stable and undistorted — no warping, melting or floating.]] Objects in the scene keep their shape. Skin, hair and faces remain realistic and consistent with the first frame. One continuous shot, no split screen or cuts. No text or graphic effects appear.';
 const TPL_VID_PRODUCT='Slow, smooth cinematic camera move: a gentle orbit around the main subject within its visible sides only (no reveal of the back or bottom) OR a slow push-in. The camera is always moving, but never fast or jerky. The main subject stays still and sharp, keeping its exact shape and proportions; nothing opens, moves or changes, and no new objects appear. [[The product\'s logo and text remain perfectly stable and undistorted, no warping or floating.]] Keep lighting and environment consistent with the first frame. One continuous shot, no split screen or cuts. No text or graphic effects appear.';
 const FORMAT_SIZE={'9:16':'1024x1536','16:9':'1536x1024','1:1':'1024x1024'};
@@ -1140,7 +1142,7 @@ function normalizeAIBase(a){
  const str=(v,m)=>typeof v==='string'&&v.length<=m?v:'',bool=v=>v===true||v===false?v:null;
  return {uid:mediaId(a.uid)||uuid(),shot:str(a.shot,2000),planPeople:bool(a.planPeople),usesUnknown:a.usesUnknown===true,productInFrame:a.productInFrame!==false,productManual:a.productManual===true,env:Array.isArray(a.env)?a.env.map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=10).slice(0,2):[],envPlanned:a.envPlanned===true,people:bool(a.people),imgPrompt:str(a.imgPrompt,8000),vidPrompt:str(a.vidPrompt,8000),
   image:mediaId(a.image),video:mediaId(a.video),videoUrl:/^https:\/\//.test(a.videoUrl||'')?str(a.videoUrl,4000):'',task:mediaId(a.task),vidModel:str(a.vidModel,120),vidRes:str(a.vidRes,10),vidRatio:str(a.vidRatio,10),vidDur:Number.isFinite(a.vidDur)?a.vidDur:0,
-  vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true,vidAudio:a.vidAudio===true,location:str(a.location,600),framing:str(a.framing,40),feeling:str(a.feeling,600),regen:a.regen===true,feedback:str(a.feedback,1000),note:str(a.note,1000)};
+  vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true,vidAudio:a.vidAudio===true,location:str(a.location,600),framing:str(a.framing,40),feeling:str(a.feeling,600),vfeedback:str(a.vfeedback,1000),vnote:str(a.vnote,1000),regen:a.regen===true,feedback:str(a.feedback,1000),note:str(a.note,1000)};
 }
 function pickVersion(a){const o={};for(const k of VERSION_FIELDS)o[k]=a[k];return o;}
 function normalizeAI(a){
@@ -1285,7 +1287,16 @@ function autoVideoPrompt(s){
  if(people&&aiSettings.noFaces)out+=' Faces stay as in the first frame — nobody turns their face toward the camera.';
  return out;
 }
-function videoPrompt(s){return (s.ai?.vidPrompt||'').trim()||autoVideoPrompt(s);}
+function videoFeedbackLine(fb){return 'USER CHANGES (highest priority): '+String(fb).trim().replace(/\.*$/,'')+'.';}
+function videoPrompt(s){
+ const base=(s.ai?.vidPrompt||'').trim()||autoVideoPrompt(s),fb=String(s.ai?.vfeedback||'').trim();
+ return fb&&!base.includes(fb)?videoFeedbackLine(fb)+' '+base:base;
+}
+// Seedance follows English best; a Russian request is translated before sending.
+async function toEnglish(text){
+ if(!/[А-Яа-яЁё]/.test(text)||!hasKey('openai'))return text;
+ try{const r=await chatJSON([{role:'system',content:'Translate the user\'s request for changing a video shot into concise, literal English for a video generation model. Return only JSON {"en":"..."}.'},{role:'user',content:text}]);return typeof r?.en==='string'&&r.en.trim()?r.en.trim():text;}catch{return text;}
+}
 
 // --- scene lookup / state ---
 function findScene(uid){
@@ -1402,6 +1413,8 @@ async function createVideoTask(uid){
  const model=String(aiSettings.videoModel||'').trim();if(!model)throw Error('Укажи модель Seedance в настройках.');
  const dur=Math.round(Number(aiSettings.duration)||5);
  let text=videoPrompt(s);
+ const vfb=String(s.ai?.vfeedback||'').trim();
+ if(vfb&&text.includes(vfb)){const en=await toEnglish(vfb);if(en!==vfb)text=text.replace(vfb,en);}
  if(aiSettings.legacyFlags)text+=' --resolution '+aiSettings.resolution+' --ratio '+aiSettings.format+' --duration '+dur+' --watermark '+!!aiSettings.watermark;
  const body={model,content:[{type:'text',text},{type:'image_url',image_url:{url:await blobToDataURL(first)},role:'first_frame'}]};
  if(!aiSettings.legacyFlags)Object.assign(body,{resolution:aiSettings.resolution,ratio:aiSettings.format,duration:dur,watermark:!!aiSettings.watermark});
@@ -1412,7 +1425,7 @@ async function createVideoTask(uid){
 }
 async function runVideo(uid){
  if(vidBusy.has(uid)||imgBusy.has(uid))return false;vidBusy.add(uid);setMsg(uid,'vid','run','Отправляю картинку в Seedance…');
- try{const id=await createVideoTask(uid);patchAI(uid,{task:id,video:'',videoUrl:'',vidModel:String(aiSettings.videoModel||'').trim(),vidRes:aiSettings.resolution,vidAudio:!!aiSettings.audio,vidRatio:aiSettings.format,vidDur:Math.round(Number(aiSettings.duration)||5),vidTokens:null,vidCost:null,vidEst:false});vidBusy.delete(uid);pollVideo(uid,id);return true;}
+ try{const id=await createVideoTask(uid);const vfb=String(findScene(uid)?.s.ai?.vfeedback||'').trim();patchAI(uid,{task:id,video:'',videoUrl:'',vnote:vfb.slice(0,300),vfeedback:'',vidModel:String(aiSettings.videoModel||'').trim(),vidRes:aiSettings.resolution,vidAudio:!!aiSettings.audio,vidRatio:aiSettings.format,vidDur:Math.round(Number(aiSettings.duration)||5),vidTokens:null,vidCost:null,vidEst:false});vidBusy.delete(uid);pollVideo(uid,id);return true;}
  catch(e){
   vidBusy.delete(uid);
   if(/real person|PrivacyInformation/i.test(e.message)){
@@ -1662,10 +1675,10 @@ function cardHTML(s,i){
  return `<div class="cardhead"><div><span class="scene-number">${String(i+1).padStart(2,'0')}</span><strong>Сцена ${i+1}</strong></div><div class="order-buttons"><button type="button" data-action="up" aria-label="Выше" ${first?'disabled':''}>↑</button><button type="button" data-action="down" aria-label="Ниже" ${last?'disabled':''}>↓</button><button type="button" data-action="duplicate">Копия</button><button type="button" data-action="delete" ${scenes.length===1?'disabled':''}>Удалить</button></div></div>
 <div class="cardbody three">
 <div class="col"><div class="col-title"><span>Текст</span><span class="pill" data-pill="text"></span></div><div class="preview" data-preview></div><p class="preview-caption">Схема титра в DaVinci. Без анимации и точной тени.</p><label class="sr-only" for="t-${id}">Текст сцены ${i+1}</label><textarea id="t-${id}" data-text spellcheck="false"></textarea><div class="texttools"><span class="muted" data-metrics></span><div class="button-row"><button type="button" class="small" data-action="highlight">Подобрать выделения</button><button type="button" class="small" data-action="markSelection" title="Выдели слова мышкой в поле текста и нажми эту кнопку">Выделить выбранное</button><button type="button" class="small" data-action="clearHighlight">Без выделений</button><button type="button" class="small" data-action="wrap">На 2 строки</button></div></div><div class="feedback" data-feedback role="status" aria-live="polite" hidden></div><div data-note class="note"></div></div>
-<div class="col"><div class="col-title"><span>Картинка</span><span class="pill" data-pill="img"></span></div><div class="media" data-box="img"></div><div class="versions" data-versions hidden><button type="button" class="small" data-ai-action="prev" aria-label="Предыдущая версия">←</button><span data-vlabel></span><button type="button" class="small" data-ai-action="next" aria-label="Следующая версия">→</button></div><p class="ai-msg" data-msg="img" role="status" aria-live="polite"></p><label class="ai-check pif"><input type="checkbox" data-pif>Продукт в кадре</label><div class="regen-box"><label class="ai-check"><input type="checkbox" data-regen>Перегенерировать</label><label class="sr-only" for="ch-${id}">Что изменить</label><textarea id="ch-${id}" data-change rows="2" maxlength="1000" placeholder="Что изменить: например, «убери диск, покажи бумбокс на пикнике, девушка танцует рядом» или «сделай вечер, тёплый свет». Пусто — новый вариант, не похожий на другие сцены."></textarea></div><div class="button-row"><button type="button" class="small" data-ai-action="image">Сгенерировать заново</button><button type="button" class="small primary" data-ai-action="video">Сгенерировать видео</button></div><div class="ai-links" data-links="img"></div></div>
-<div class="col"><div class="col-title"><span>Видео</span><span class="pill" data-pill="vid"></span></div><div class="media" data-box="vid"></div><p class="ai-msg" data-msg="vid" role="status" aria-live="polite"></p><p class="vid-cost" data-cost></p><div class="ai-links" data-links="vid"></div></div>
+<div class="col"><div class="col-title"><span>Картинка</span><span class="pill" data-pill="img"></span></div><div class="media" data-box="img"></div><div class="versions" data-versions hidden><button type="button" class="small" data-ai-action="prev" aria-label="Предыдущая версия">←</button><span data-vlabel></span><button type="button" class="small" data-ai-action="next" aria-label="Следующая версия">→</button></div><p class="ai-msg" data-msg="img" role="status" aria-live="polite"></p><label class="ai-check pif"><input type="checkbox" data-pif>Продукт в кадре</label><div class="regen-box"><label class="ai-check"><input type="checkbox" data-regen>Перегенерировать</label><label class="sr-only" for="ch-${id}">Что изменить</label><textarea id="ch-${id}" data-change rows="2" maxlength="1000" placeholder="Что изменить: например, «убери диск, покажи бумбокс на пикнике, девушка танцует рядом» или «сделай вечер, тёплый свет». Пусто — новый вариант, не похожий на другие сцены."></textarea></div><div class="button-row"><button type="button" class="small" data-ai-action="image">Сгенерировать заново</button><button type="button" class="small primary" data-ai-action="video">Сгенерировать видео</button></div><button type="button" class="small upload-own" data-ai-action="upload">Загрузить свою картинку</button><div class="ai-links" data-links="img"></div></div>
+<div class="col"><div class="col-title"><span>Видео</span><span class="pill" data-pill="vid"></span></div><div class="media" data-box="vid"></div><p class="ai-msg" data-msg="vid" role="status" aria-live="polite"></p><p class="vid-cost" data-cost></p><div class="ai-links" data-links="vid"></div><div class="regen-box vregen" data-vregen><label for="vc-${id}" data-vchange-label>Что изменить в видео</label><textarea id="vc-${id}" data-vchange rows="2" maxlength="1000" placeholder="Например: камера медленно отъезжает назад; девушка поворачивается к окну; без движения рук"></textarea><div class="button-row"><button type="button" class="small" data-ai-action="video">Сгенерировать видео заново</button></div></div></div>
 </div>
-<details class="prompt-box" data-prompts><summary>План кадра и промпты — посмотреть и поправить перед отправкой</summary><div class="plan-row"><div><label for="pp-${id}">План кадра <span class="muted" data-plan-note></span></label><textarea id="pp-${id}" data-plan spellcheck="false" maxlength="2000" placeholder="Пусто — безопасный кадр: продукт целиком в окружении, с видимых на фото сторон"></textarea></div><div><label for="ppl-${id}">В кадре</label><select id="ppl-${id}" data-plan-people><option value="">Решает модель</option><option value="1">Человек с продуктом</option><option value="0">Только продукт</option></select></div></div><div class="prompt-grid"><div><label for="pi-${id}">Картинка</label><textarea id="pi-${id}" data-prompt="img" spellcheck="false"></textarea></div><div><label for="pv-${id}">Видео <span class="muted" data-vid-kind></span></label><textarea id="pv-${id}" data-prompt="vid" spellcheck="false"></textarea></div></div><div class="button-row"><button type="button" class="small" data-ai-action="resetPrompts">Вернуть автоматические</button><button type="button" class="linklike" data-ai-action="upload">Загрузить свой кадр вместо генерации</button></div><p class="muted">План кадра подставляется в промпт картинки как {shot_plan}. Правки используются при следующей генерации этой сцены. Пока поле промпта не тронуто, он собирается автоматически из шаблона.</p></details>
+<details class="prompt-box" data-prompts><summary>План кадра и промпты — посмотреть и поправить перед отправкой</summary><div class="plan-row"><div><label for="pp-${id}">План кадра <span class="muted" data-plan-note></span></label><textarea id="pp-${id}" data-plan spellcheck="false" maxlength="2000" placeholder="Пусто — безопасный кадр: продукт целиком в окружении, с видимых на фото сторон"></textarea></div><div><label for="ppl-${id}">В кадре</label><select id="ppl-${id}" data-plan-people><option value="">Решает модель</option><option value="1">Человек с продуктом</option><option value="0">Только продукт</option></select></div></div><div class="prompt-grid"><div><label for="pi-${id}">Картинка</label><textarea id="pi-${id}" data-prompt="img" spellcheck="false"></textarea></div><div><label for="pv-${id}">Видео <span class="muted" data-vid-kind></span></label><textarea id="pv-${id}" data-prompt="vid" spellcheck="false"></textarea></div></div><div class="button-row"><button type="button" class="small" data-ai-action="resetPrompts">Вернуть автоматические</button></div><p class="muted">План кадра подставляется в промпт картинки как {shot_plan}. Правки используются при следующей генерации этой сцены. Пока поле промпта не тронуто, он собирается автоматически из шаблона.</p></details>
 <div class="cardbottom"><div><strong class="seconds" data-time>—</strong><span class="muted" data-range></span></div><div class="manual"><label for="m-${id}">Время, с</label><input id="m-${id}" data-manual inputmode="decimal" placeholder="Авто" maxlength="6"><button type="button" class="small" data-action="auto">Авто</button></div></div>`;
 }
 function textState(s){if(!String(s.text).trim())return {state:'wait',label:'Пусто'};try{parse(s.text);return {state:'done',label:'Готово'};}catch{return {state:'error',label:'Ошибка'};}}
@@ -1698,9 +1711,12 @@ async function fillAI(s,card){
  const rg=card.querySelector('[data-regen]'),ch=card.querySelector('[data-change]');rg.checked=!!a.regen;rg.disabled=!a.image;card.querySelector('.regen-box').classList.toggle('on',!!a.regen);card.querySelector('.regen-box').hidden=!a.image;
  if(document.activeElement!==ch)ch.value=a.feedback||'';
  const pf=card.querySelector('[data-pif]');pf.checked=a.productInFrame!==false;pf.disabled=busyI;card.querySelector('.pif').title=a.productManual?'Задано вручную':'Решила раскадровка';
- bv.disabled=busyI||!a.image||(busyV&&!(a.task&&aiGaveUp.has(a.task)));
- bv.textContent=a.task&&aiGaveUp.has(a.task)?'Проверить видео':busyV?'Видео в работе…':(a.video||a.videoUrl)?'Сгенерировать видео заново':'Сгенерировать видео';
- card.querySelector('[data-ai-action="upload"]').disabled=busyI;
+ const hasVid=!!(a.video||a.videoUrl),vDis=busyI||!a.image||(busyV&&!(a.task&&aiGaveUp.has(a.task)));
+ card.querySelectorAll('[data-ai-action="video"]').forEach(b=>{b.disabled=vDis;b.textContent=a.task&&aiGaveUp.has(a.task)?'Проверить видео':busyV?'Видео в работе…':hasVid?'Сгенерировать видео заново':'Сгенерировать видео';});
+ card.querySelectorAll('[data-ai-action="upload"]').forEach(b=>b.disabled=busyI);
+ const vr=card.querySelector('[data-vregen]'),vc=card.querySelector('[data-vchange]');vr.hidden=!a.image;vr.classList.toggle('on',!!String(a.vfeedback||'').trim());
+ card.querySelector('[data-vchange-label]').textContent=hasVid?'Что изменить в видео':'Пожелания к видео (необязательно)';vr.querySelector('.button-row').hidden=!hasVid;
+ if(document.activeElement!==vc)vc.value=a.vfeedback||'';
  const pv=card.querySelector('[data-prompts]');card.querySelector('[data-vid-kind]').textContent=scenePeople(s)?'· в кадре есть люди':'· только продукт';
  if(pv.open)fillPrompts(s,card);
  const token={};card._aiToken=token;
@@ -1718,6 +1734,7 @@ async function fillAI(s,card){
  const link=(box,href,text,download)=>{const l=document.createElement('a');l.href=href;l.textContent=text;if(download)l.download=download;else{l.target='_blank';l.rel='noopener noreferrer';}box.append(l);};
  linksI.replaceChildren();linksV.replaceChildren();card.querySelector('[data-cost]').textContent=(src||a.task)&&!busyV?costLine(a):'';
  if(img)link(linksI,img.url,'Скачать картинку',base+' кадр.'+extOf(img.type));
+ if(a.vnote&&(vid||a.videoUrl)){const n=document.createElement('span');n.className='muted';n.textContent='по запросу: «'+a.vnote.slice(0,80)+(a.vnote.length>80?'…':'')+'»';linksV.append(n);}
  if(vid)link(linksV,vid.url,'Скачать видео',base+' видео.'+extOf(vid.type));else if(a.videoUrl)link(linksV,a.videoUrl,'Открыть видео (ссылка ≈24 ч)');
  if(a.task&&!aiPolling.has(a.task)&&!aiGaveUp.has(a.task))pollVideo(u,a.task);
 }
@@ -1725,7 +1742,7 @@ function fillPrompts(s,card){
  const plan=card.querySelector('[data-plan]'),pp=card.querySelector('[data-plan-people]');
  if(document.activeElement!==plan)plan.value=s.ai?.shot||'';pp.value=s.ai?.planPeople===true?'1':s.ai?.planPeople===false?'0':'';
  card.querySelector('[data-plan-note]').textContent=s.ai?.usesUnknown?'· сцена про неизвестную деталь — выбран безопасный вариант':'';
- for(const [k,auto,over] of [['img',()=>autoImagePrompt(s),s.ai?.imgPrompt],['vid',()=>autoVideoPrompt(s),s.ai?.vidPrompt]]){
+ for(const [k,auto,over] of [['img',()=>autoImagePrompt(s),s.ai?.imgPrompt],['vid',()=>videoPrompt({...s,ai:{...s.ai,vidPrompt:''}}),s.ai?.vidPrompt&&videoPrompt(s)]]){
   const ta=card.querySelector('[data-prompt="'+k+'"]');if(document.activeElement===ta)continue;ta.value=(over||'').trim()||auto();ta.classList.toggle('edited',!!(over||'').trim());
  }
 }
@@ -1736,6 +1753,7 @@ $('cards').addEventListener('change',e=>{if(!e.target.matches('[data-pif]'))retu
  if(card.querySelector('[data-prompts]').open)fillPrompts(s,card);});
 $('cards').addEventListener('change',e=>{if(!e.target.matches('[data-regen]'))return;const card=e.target.closest('[data-card]'),s=card&&scenes.find(x=>x.id===card.dataset.card);if(!s)return;s.ai={...aiOf(s),regen:e.target.checked};card.querySelector('.regen-box').classList.toggle('on',e.target.checked);markDirty();refreshRegenCount();});
 $('cards').addEventListener('input',e=>{if(!e.target.matches('[data-change]'))return;const card=e.target.closest('[data-card]'),s=card&&scenes.find(x=>x.id===card.dataset.card);if(!s)return;const v=e.target.value.slice(0,1000);s.ai={...aiOf(s),feedback:v,regen:v.trim()?true:s.ai?.regen};const rg=card.querySelector('[data-regen]');if(v.trim()&&!rg.checked){rg.checked=true;card.querySelector('.regen-box').classList.add('on');refreshRegenCount();}markDirty();if(card.querySelector('[data-prompts]').open)fillPrompts(s,card);});
+$('cards').addEventListener('input',e=>{if(!e.target.matches('[data-vchange]'))return;const card=e.target.closest('[data-card]'),s=card&&scenes.find(x=>x.id===card.dataset.card);if(!s)return;s.ai={...aiOf(s),vfeedback:e.target.value.slice(0,1000)};card.querySelector('[data-vregen]').classList.toggle('on',!!e.target.value.trim());markDirty();if(card.querySelector('[data-prompts]').open)fillPrompts(s,card);});
 $('cards').addEventListener('toggle',e=>{if(!e.target.matches?.('[data-prompts]')||!e.target.open)return;const card=e.target.closest('[data-card]'),s=scenes.find(x=>x.id===card?.dataset.card);if(s)fillPrompts(s,card);},true);
 $('cards').addEventListener('input',e=>{
  const card=e.target.closest('[data-card]'),s=card&&scenes.find(x=>x.id===card.dataset.card);if(!s)return;
@@ -1754,11 +1772,16 @@ $('cards').addEventListener('click',e=>{
  else if(act==='upload'){aiUploadTarget=uid;$('aiFrameFile').click();}
  else if(act==='resetPrompts'){s.ai={...s.ai,imgPrompt:'',vidPrompt:''};fillPrompts(s,card);setStatus('Промпты сцены снова собираются автоматически.');}
 });
-$('aiFrameFile').addEventListener('change',async()=>{
- const uid=aiUploadTarget,f=$('aiFrameFile').files[0];aiUploadTarget='';$('aiFrameFile').value='';if(!uid||!f)return;
- try{const key=await storeMedia('img',await prepareUpload(f));pushVersion(uid,{image:key,video:'',videoUrl:'',task:'',people:null,vidModel:'',vidTokens:null,vidCost:null,vidEst:false,vidAudio:false,note:'свой кадр',regen:false,feedback:''});aiMsg.delete(uid+':vid');setMsg(uid,'img','done','Свой кадр загружен. Можно делать видео.');if(hasKey('openai'))detectPeople(uid,key);}
+async function uploadOwnFrame(uid,file){
+ if(!uid||!file)return;
+ if(imgBusy.has(uid)){setMsg(uid,'img','error','Дождись окончания генерации картинки.');return;}
+ try{const key=await storeMedia('img',await prepareUpload(file));pushVersion(uid,{image:key,video:'',videoUrl:'',task:'',people:null,vidModel:'',vidTokens:null,vidCost:null,vidEst:false,vidAudio:false,vnote:'',note:'своя картинка',regen:false,feedback:''});aiMsg.delete(uid+':vid');setMsg(uid,'img','done','Своя картинка загружена как новая версия. Можно делать видео.');if(hasKey('openai'))detectPeople(uid,key);refreshRegenCount();}
  catch(e){setMsg(uid,'img','error',e.message);}
-});
+}
+$('aiFrameFile').addEventListener('change',()=>{const uid=aiUploadTarget,f=$('aiFrameFile').files[0];aiUploadTarget='';$('aiFrameFile').value='';uploadOwnFrame(uid,f);});
+$('cards').addEventListener('dragover',e=>{const box=e.target.closest('[data-box="img"]');if(!box||!e.dataTransfer?.types?.includes('Files'))return;e.preventDefault();box.classList.add('dropping');});
+$('cards').addEventListener('dragleave',e=>{const box=e.target.closest('[data-box="img"]');if(box)box.classList.remove('dropping');});
+$('cards').addEventListener('drop',e=>{const box=e.target.closest('[data-box="img"]');if(!box)return;e.preventDefault();box.classList.remove('dropping');const card=box.closest('[data-card]'),s=card&&scenes.find(x=>x.id===card.dataset.card),f=[...(e.dataTransfer?.files||[])].find(x=>/^image\//.test(x.type)||/\.(heic|heif|jpe?g|png|webp)$/i.test(x.name));if(s&&f)uploadOwnFrame(aiOf(s).uid,f);});
 $('aiZip').addEventListener('click',async()=>{
  try{const entries=[],base=safeFilename(($('name').value||'Ролик').trim());
   for(const [i,s] of scenes.entries()){const n=String(i+1).padStart(2,'0');
