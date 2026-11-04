@@ -387,6 +387,7 @@ CODEX_MODEL = os.environ.get("CODEX_MODEL", "").strip()
 CODEX_SLOTS = threading.BoundedSemaphore(max(1, int(os.environ.get("CODEX_PARALLEL", "2"))))
 CODEX_HOME = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp")
+CODEX_MAX_REFS = 5
 
 
 _warned_bin = []
@@ -611,6 +612,8 @@ def codex_image(fields, refs):
             with open(path, "wb") as f:
                 f.write(data)
             names.append(path)
+            if len(names) == CODEX_MAX_REFS:  # Codex's image tool takes at most 5; the page sends the most important first
+                break
         size = fields.get("size") or "1024x1536"
         try:
             w, h = (int(x) for x in size.split("x"))
