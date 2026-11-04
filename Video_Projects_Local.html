@@ -69,7 +69,8 @@
 .regen-box{display:grid;gap:6px;background:#f7f9f4;border:1px solid #e6ebe0;border-radius:8px;padding:8px}.regen-box textarea{min-height:52px;font-size:12.5px}.regen-box.on{border-color:#c9a25b;background:#fffbf1}
 .pause-check{margin-top:12px!important;font-size:13px}
 .pif{font-size:12.5px;padding:2px 2px 0}
-.upload-own{align-self:flex-start}.vregen label{font-size:11.5px;margin:0}
+.upload-own{align-self:flex-start}
+.manual-asset{font-size:12px}.manual-asset summary{cursor:pointer;color:var(--muted);font-weight:650}.manual-asset input{height:34px;font-size:12.5px;margin-top:6px}.manual-asset p{margin:6px 0 0}.vregen label{font-size:11.5px;margin:0}
 .media.dropping{outline:3px dashed var(--green);outline-offset:-6px}
 .stale{position:sticky;top:8px;z-index:40;box-shadow:0 8px 30px #12251822}.stale p{margin:6px 0}
 .orphan-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-top:10px}
@@ -136,10 +137,10 @@
 <div><label for="aiVideoMode">Как делать видео</label><select id="aiVideoMode"><option value="reference">Из текста, картинка — референс</option><option value="first_frame">Картинка — первый кадр</option></select></div>
 <div class="wide"><p class="muted" id="videoModeHint"></p></div>
 <h3 class="wide" id="assetTitle">Люди в видео: библиотека AI-портретов BytePlus</h3>
-<div class="wide"><label class="ai-check"><input type="checkbox" id="aiAssetLib">Регистрировать картинки с людьми как AI-портреты (тогда Seedance 2.x принимает лица)</label><p class="muted">Картинка сцены загружается в твой бакет TOS, регистрируется в «Private virtual portrait library» как AI-сгенерированный портрет и уходит в Seedance ссылкой asset://. Нужен запущенный AI-сервер и ключи аккаунта BytePlus (не ключ ModelArk). Пошаговая настройка — в README. Бесплатный уровень: до 50 портретов и 3 регистрации в минуту.</p></div>
+<div class="wide"><label class="ai-check"><input type="checkbox" id="aiAssetLib">Регистрировать картинки с людьми как AI-портреты (тогда Seedance 2.x принимает лица)</label><p class="muted">Картинка сцены регистрируется в «Private virtual portrait library» как AI-сгенерированный портрет и уходит в Seedance ссылкой asset://. Нужен запущенный AI-сервер и ключи аккаунта BytePlus (не ключ ModelArk). Бакет TOS не обязателен (на личном аккаунте он недоступен): без него картинка передаётся прямо в запросе — «Проверить доступ» покажет, принимает ли это BytePlus. Если нет — загрузи кадр в консоли и впиши Asset ID в сцене. Пошаговая настройка — в README. Бесплатный уровень: до 50 портретов и 3 регистрации в минуту.</p></div>
 <div><label for="aiBpAk">Access Key ID</label><input id="aiBpAk" type="password" autocomplete="off" spellcheck="false" placeholder="AKLT…"></div>
 <div><label for="aiBpSk">Secret Access Key</label><input id="aiBpSk" type="password" autocomplete="off" spellcheck="false"></div>
-<div><label for="aiTosBucket">Бакет TOS</label><input id="aiTosBucket" autocomplete="off" spellcheck="false" placeholder="например, nastya-video-frames"></div>
+<div><label for="aiTosBucket">Бакет TOS <span class="muted">необязательно</span></label><input id="aiTosBucket" autocomplete="off" spellcheck="false" placeholder="пусто — без бакета"></div>
 <div><label for="aiTosEndpoint">Адрес TOS</label><input id="aiTosEndpoint" autocomplete="off" spellcheck="false"></div>
 <div><label for="aiBpRegion">Регион</label><input id="aiBpRegion" autocomplete="off" spellcheck="false"></div>
 <div><label for="aiBpProject">Проект ModelArk</label><input id="aiBpProject" autocomplete="off" spellcheck="false"></div>
@@ -1160,7 +1161,7 @@ function normalizeAIBase(a){
  const str=(v,m)=>typeof v==='string'&&v.length<=m?v:'',bool=v=>v===true||v===false?v:null;
  return {uid:mediaId(a.uid)||uuid(),shot:str(a.shot,2000),planPeople:bool(a.planPeople),usesUnknown:a.usesUnknown===true,productInFrame:a.productInFrame!==false,productManual:a.productManual===true,env:Array.isArray(a.env)?a.env.map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=10).slice(0,2):[],envPlanned:a.envPlanned===true,people:bool(a.people),imgPrompt:str(a.imgPrompt,8000),vidPrompt:str(a.vidPrompt,8000),
   image:mediaId(a.image),video:mediaId(a.video),videoUrl:/^https:\/\//.test(a.videoUrl||'')?str(a.videoUrl,4000):'',task:mediaId(a.task),vidModel:str(a.vidModel,120),vidRes:str(a.vidRes,10),vidRatio:str(a.vidRatio,10),vidDur:Number.isFinite(a.vidDur)?a.vidDur:0,
-  vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true,vidAudio:a.vidAudio===true,location:str(a.location,600),framing:str(a.framing,40),feeling:str(a.feeling,600),assetId:mediaId(a.assetId),assetFor:mediaId(a.assetFor),vfeedback:str(a.vfeedback,1000),vnote:str(a.vnote,1000),regen:a.regen===true,feedback:str(a.feedback,1000),note:str(a.note,1000)};
+  vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true,vidAudio:a.vidAudio===true,location:str(a.location,600),framing:str(a.framing,40),feeling:str(a.feeling,600),assetId:mediaId(a.assetId),assetFor:mediaId(a.assetFor),assetManual:a.assetManual===true,vfeedback:str(a.vfeedback,1000),vnote:str(a.vnote,1000),regen:a.regen===true,feedback:str(a.feedback,1000),note:str(a.note,1000)};
 }
 function pickVersion(a){const o={};for(const k of VERSION_FIELDS)o[k]=a[k];return o;}
 function normalizeAI(a){
@@ -1464,7 +1465,8 @@ async function createVideoTask(uid){
  if(vfb&&text.includes(vfb)){const en=await toEnglish(vfb);if(en!==vfb)text=text.replace(vfb,en);}
  if(aiSettings.legacyFlags)text+=' --resolution '+aiSettings.resolution+' --ratio '+aiSettings.format+' --duration '+dur+' --watermark '+!!aiSettings.watermark;
  if(/-(mini|fast)-/i.test(model)&&aiSettings.resolution==='1080p')throw Error('Seedance 2.0 Mini и Fast не делают 1080p — выбери 720p или 480p в настройках, либо модель Seedance 2.0.');
- const useAsset=aiSettings.assetLib&&scenePeople(s);
+ const manualAsset=s.ai.assetManual&&s.ai.assetFor===s.ai.image&&s.ai.assetId;
+ const useAsset=manualAsset||(aiSettings.assetLib&&scenePeople(s));
  const sceneUrl=useAsset?await sceneAssetUrl(uid,s.ai.image,first):await blobToDataURL(first);
  const ref=aiSettings.videoMode==='reference';
  const content=[{type:'text',text},{type:'image_url',image_url:{url:sceneUrl},role:ref?'reference_image':'first_frame'}];
@@ -1506,7 +1508,7 @@ async function pollVideo(uid,id){
     const url=d.content?.video_url;if(!url)throw Error('Seedance не вернул ссылку на видео.');
     const bill=billTask(id,d,findScene(uid)?.s.ai||{});
     patchAI(uid,{task:'',videoUrl:url,video:'',...bill});
-    {const av=findScene(uid)?.s.ai;if(aiSettings.assetDelete&&av?.assetId){const aid=av.assetId;patchAI(uid,{assetId:'',assetFor:''});assetCall('delete',{assetId:aid}).catch(()=>{});}}setMsg(uid,'vid','run','Видео готово, сохраняю в браузер…');
+    {const av=findScene(uid)?.s.ai;if(aiSettings.assetDelete&&av?.assetId&&!av.assetManual){const aid=av.assetId;patchAI(uid,{assetId:'',assetFor:''});assetCall('delete',{assetId:aid}).catch(()=>{});}}setMsg(uid,'vid','run','Видео готово, сохраняю в браузер…');
     try{const key=await storeMedia('vid',await fetchMedia(url));if(findScene(uid)?.s.ai?.videoUrl===url)patchAI(uid,{video:key});setMsg(uid,'vid','done','Готово за '+elapsed(t0)+'.');}
     catch{setMsg(uid,'vid','done','Видео готово, но сохранить его в браузер не удалось. Скачай по ссылке — она действует около 24 часов.');}
     return;
@@ -1731,7 +1733,7 @@ function cardHTML(s,i){
 <div class="cardbody three">
 <div class="col"><div class="col-title"><span>Текст</span><span class="pill" data-pill="text"></span></div><div class="preview" data-preview></div><p class="preview-caption">Схема титра в DaVinci. Без анимации и точной тени.</p><label class="sr-only" for="t-${id}">Текст сцены ${i+1}</label><textarea id="t-${id}" data-text spellcheck="false"></textarea><div class="texttools"><span class="muted" data-metrics></span><div class="button-row"><button type="button" class="small" data-action="highlight">Подобрать выделения</button><button type="button" class="small" data-action="markSelection" title="Выдели слова мышкой в поле текста и нажми эту кнопку">Выделить выбранное</button><button type="button" class="small" data-action="clearHighlight">Без выделений</button><button type="button" class="small" data-action="wrap">На 2 строки</button></div></div><div class="feedback" data-feedback role="status" aria-live="polite" hidden></div><div data-note class="note"></div></div>
 <div class="col"><div class="col-title"><span>Картинка</span><span class="pill" data-pill="img"></span></div><div class="media" data-box="img"></div><div class="versions" data-versions hidden><button type="button" class="small" data-ai-action="prev" aria-label="Предыдущая версия">←</button><span data-vlabel></span><button type="button" class="small" data-ai-action="next" aria-label="Следующая версия">→</button></div><p class="ai-msg" data-msg="img" role="status" aria-live="polite"></p><label class="ai-check pif"><input type="checkbox" data-pif>Продукт в кадре</label><div class="regen-box"><label class="ai-check"><input type="checkbox" data-regen>Перегенерировать</label><label class="sr-only" for="ch-${id}">Что изменить</label><textarea id="ch-${id}" data-change rows="2" maxlength="1000" placeholder="Что изменить: например, «убери диск, покажи бумбокс на пикнике, девушка танцует рядом» или «сделай вечер, тёплый свет». Пусто — новый вариант, не похожий на другие сцены."></textarea></div><div class="button-row"><button type="button" class="small" data-ai-action="image">Сгенерировать заново</button><button type="button" class="small primary" data-ai-action="video">Сгенерировать видео</button></div><button type="button" class="small upload-own" data-ai-action="upload">Загрузить свою картинку</button><div class="ai-links" data-links="img"></div></div>
-<div class="col"><div class="col-title"><span>Видео</span><span class="pill" data-pill="vid"></span></div><div class="media" data-box="vid"></div><p class="ai-msg" data-msg="vid" role="status" aria-live="polite"></p><p class="vid-cost" data-cost></p><div class="ai-links" data-links="vid"></div><div class="regen-box vregen" data-vregen><label for="vc-${id}" data-vchange-label>Что изменить в видео</label><textarea id="vc-${id}" data-vchange rows="2" maxlength="1000" placeholder="Например: камера медленно отъезжает назад; девушка поворачивается к окну; без движения рук"></textarea><div class="button-row"><button type="button" class="small" data-ai-action="video">Сгенерировать видео заново</button></div></div></div>
+<div class="col"><div class="col-title"><span>Видео</span><span class="pill" data-pill="vid"></span></div><div class="media" data-box="vid"></div><p class="ai-msg" data-msg="vid" role="status" aria-live="polite"></p><p class="vid-cost" data-cost></p><div class="ai-links" data-links="vid"></div><details class="manual-asset" data-manual-asset><summary>Свой Asset ID из BytePlus</summary><input data-asset-id autocomplete="off" spellcheck="false" placeholder="asset-2026…"><p class="muted">Скачай картинку, загрузи её в консоли ModelArk (Model Playground → My assets → Virtual Portrait → Manage assets) и вставь сюда ID. Видео этой картинки пойдёт в Seedance как asset://. Привязан к текущей версии картинки.</p></details><div class="regen-box vregen" data-vregen><label for="vc-${id}" data-vchange-label>Что изменить в видео</label><textarea id="vc-${id}" data-vchange rows="2" maxlength="1000" placeholder="Например: камера медленно отъезжает назад; девушка поворачивается к окну; без движения рук"></textarea><div class="button-row"><button type="button" class="small" data-ai-action="video">Сгенерировать видео заново</button></div></div></div>
 </div>
 <details class="prompt-box" data-prompts><summary>План кадра и промпты — посмотреть и поправить перед отправкой</summary><div class="plan-row"><div><label for="pp-${id}">План кадра <span class="muted" data-plan-note></span></label><textarea id="pp-${id}" data-plan spellcheck="false" maxlength="2000" placeholder="Пусто — безопасный кадр: продукт целиком в окружении, с видимых на фото сторон"></textarea></div><div><label for="ppl-${id}">В кадре</label><select id="ppl-${id}" data-plan-people><option value="">Решает модель</option><option value="1">Человек с продуктом</option><option value="0">Только продукт</option></select></div></div><div class="prompt-grid"><div><label for="pi-${id}">Картинка</label><textarea id="pi-${id}" data-prompt="img" spellcheck="false"></textarea></div><div><label for="pv-${id}">Видео <span class="muted" data-vid-kind></span></label><textarea id="pv-${id}" data-prompt="vid" spellcheck="false"></textarea></div></div><div class="button-row"><button type="button" class="small" data-ai-action="resetPrompts">Вернуть автоматические</button></div><p class="muted">План кадра подставляется в промпт картинки как {shot_plan}. Правки используются при следующей генерации этой сцены. Пока поле промпта не тронуто, он собирается автоматически из шаблона.</p></details>
 <div class="cardbottom"><div><strong class="seconds" data-time>—</strong><span class="muted" data-range></span></div><div class="manual"><label for="m-${id}">Время, с</label><input id="m-${id}" data-manual inputmode="decimal" placeholder="Авто" maxlength="6"><button type="button" class="small" data-action="auto">Авто</button></div></div>`;
@@ -1769,6 +1771,7 @@ async function fillAI(s,card){
  const hasVid=!!(a.video||a.videoUrl),vDis=busyI||!a.image||(busyV&&!(a.task&&aiGaveUp.has(a.task)));
  card.querySelectorAll('[data-ai-action="video"]').forEach(b=>{b.disabled=vDis;b.textContent=a.task&&aiGaveUp.has(a.task)?'Проверить видео':busyV?'Видео в работе…':hasVid?'Сгенерировать видео заново':'Сгенерировать видео';});
  card.querySelectorAll('[data-ai-action="upload"]').forEach(b=>b.disabled=busyI);
+ const ma=card.querySelector('[data-manual-asset]'),mi=card.querySelector('[data-asset-id]'),manual=a.assetManual&&a.assetFor===a.image?a.assetId:'';ma.hidden=!a.image;if(document.activeElement!==mi)mi.value=manual;if(manual)ma.open=true;
  const vr=card.querySelector('[data-vregen]'),vc=card.querySelector('[data-vchange]');vr.hidden=!a.image;vr.classList.toggle('on',!!String(a.vfeedback||'').trim());
  card.querySelector('[data-vchange-label]').textContent=hasVid?'Что изменить в видео':'Пожелания к видео (необязательно)';vr.querySelector('.button-row').hidden=!hasVid;
  if(document.activeElement!==vc)vc.value=a.vfeedback||'';
@@ -1809,6 +1812,11 @@ $('cards').addEventListener('change',e=>{if(!e.target.matches('[data-pif]'))retu
 $('cards').addEventListener('change',e=>{if(!e.target.matches('[data-regen]'))return;const card=e.target.closest('[data-card]'),s=card&&scenes.find(x=>x.id===card.dataset.card);if(!s)return;s.ai={...aiOf(s),regen:e.target.checked};card.querySelector('.regen-box').classList.toggle('on',e.target.checked);markDirty();refreshRegenCount();});
 $('cards').addEventListener('input',e=>{if(!e.target.matches('[data-change]'))return;const card=e.target.closest('[data-card]'),s=card&&scenes.find(x=>x.id===card.dataset.card);if(!s)return;const v=e.target.value.slice(0,1000);s.ai={...aiOf(s),feedback:v,regen:v.trim()?true:s.ai?.regen};const rg=card.querySelector('[data-regen]');if(v.trim()&&!rg.checked){rg.checked=true;card.querySelector('.regen-box').classList.add('on');refreshRegenCount();}markDirty();if(card.querySelector('[data-prompts]').open)fillPrompts(s,card);});
 $('cards').addEventListener('input',e=>{if(!e.target.matches('[data-vchange]'))return;const card=e.target.closest('[data-card]'),s=card&&scenes.find(x=>x.id===card.dataset.card);if(!s)return;s.ai={...aiOf(s),vfeedback:e.target.value.slice(0,1000)};card.querySelector('[data-vregen]').classList.toggle('on',!!e.target.value.trim());markDirty();if(card.querySelector('[data-prompts]').open)fillPrompts(s,card);});
+$('cards').addEventListener('input',e=>{if(!e.target.matches('[data-asset-id]'))return;const card=e.target.closest('[data-card]'),s=card&&scenes.find(x=>x.id===card.dataset.card);if(!s?.ai?.image)return;
+ const v=e.target.value.trim().replace(/^asset:\/\//,'');
+ if(!v){s.ai={...s.ai,assetId:'',assetFor:'',assetManual:false};markDirty();return;}
+ if(!/^[\w.:-]{4,100}$/.test(v)){setStatus('Asset ID выглядит неверно: нужен вида asset-2026…',true);return;}
+ s.ai={...s.ai,assetId:v,assetFor:s.ai.image,assetManual:true};markDirty();setStatus('Сцена '+(scenes.indexOf(s)+1)+': видео пойдёт в Seedance как asset://'+v);});
 $('cards').addEventListener('toggle',e=>{if(!e.target.matches?.('[data-prompts]')||!e.target.open)return;const card=e.target.closest('[data-card]'),s=scenes.find(x=>x.id===card?.dataset.card);if(s)fillPrompts(s,card);},true);
 $('cards').addEventListener('input',e=>{
  const card=e.target.closest('[data-card]'),s=card&&scenes.find(x=>x.id===card.dataset.card);if(!s)return;
@@ -1977,7 +1985,15 @@ function refreshVideoModeHint(){$('videoModeHint').textContent=aiSettings.videoM
 $('aiVideoMode').addEventListener('change',()=>{refreshVideoModeHint();refreshVideoSettings();scenes.forEach(x=>refreshAI(x.ai?.uid));});
 $('aiAssetLib').addEventListener('change',()=>{refreshVideoModeHint();if(aiSettings.assetLib&&aiSettings.noFaces&&confirm('Библиотека портретов включена. Выключить «Без чётких лиц», чтобы новые картинки снова могли показывать лица?')){aiSettings.noFaces=false;$('aiNoFaces').checked=false;saveAISettings();}});
 $('aiAssetCheck').addEventListener('click',async()=>{const st=$('assetStatus');st.textContent='Проверяю доступ к BytePlus…';
- try{await checkProxy();const d=await assetCall('check',{});st.textContent='Библиотека портретов (ModelArk OpenAPI): '+(d.ark==='ok'?'доступ есть ✓':d.ark)+' · Бакет TOS: '+(d.tos==='ok'?'запись работает ✓':d.tos);}
+ try{await checkProxy();
+  const cv=document.createElement('canvas');cv.width=cv.height=320;const g=cv.getContext('2d'),gr=g.createLinearGradient(0,0,320,320);gr.addColorStop(0,'#c9b48a');gr.addColorStop(1,'#5d7a6a');g.fillStyle=gr;g.fillRect(0,0,320,320);g.fillStyle='#f3efe6';g.fillRect(110,90,100,140);
+  const testImage=cv.toDataURL('image/jpeg',0.85).split(',')[1];
+  if(!aiSettings.tosBucket)st.textContent='Проверяю ключи и регистрирую тестовую картинку без бакета… до минуты.';
+  const d=await assetCall('check',{testImage});
+  const parts=['Библиотека портретов: '+(d.ark==='ok'?'доступ есть ✓':d.ark)];
+  if(d.tos)parts.push('Бакет TOS: '+(d.tos==='ok'?'запись работает ✓':d.tos));
+  if(d.inline)parts.push('Регистрация без бакета: '+(d.inline==='ok'?'работает ✓ — всё готово':d.inline));
+  st.textContent=parts.join(' · ');}
  catch(e){st.textContent=e.message;}});
 refreshVideoModeHint();
 $('aiResetSettings').addEventListener('click',()=>{

@@ -164,8 +164,8 @@ def asset_cfg(body):
     }
     if not c["ak"] or not c["sk"]:
         raise AssetError("Нет Access Key / Secret Key BytePlus. Укажи их в настройках приложения.")
-    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", c["bucket"]):
-        raise AssetError("Укажи имя бакета TOS (строчные буквы, цифры и дефисы).")
+    if c["bucket"] and not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", c["bucket"]):
+        raise AssetError("Имя бакета TOS: только строчные латинские буквы, цифры и дефисы. Без бакета оставь поле пустым.")
     for host in (c["tos"], c["ark"]):
         if not re.fullmatch(r"[a-z0-9.-]+\.(bytepluses|byteplusapi|volces|volcengineapi)\.com", host):
             raise AssetError("Неизвестный адрес BytePlus: " + host)
@@ -235,38 +235,53 @@ def ensure_group(c):
     return gid
 
 
+def create_and_wait(c, gid, url, name):
+    with _asset_lock:  # CreateAsset: 3 calls per minute on the Entry tier
+        wait = _last_create[0] + 21 - time.time()
+        if wait > 0:
+            time.sleep(wait)
+        _last_create[0] = time.time()
+        aid = str(openapi_call(c, "CreateAsset", {"GroupId": gid, "URL": url, "AssetType": "Image",
+                                                  "Name": (name or "frame")[:60], "ProjectName": c["project"]}).get("Id") or "")
+    if not aid:
+        raise AssetError("CreateAsset не вернул ID.")
+    deadline = time.time() + 180
+    status = ""
+    while time.time() < deadline:
+        info = openapi_call(c, "GetAsset", {"Id": aid, "ProjectName": c["project"]})
+        status = str(info.get("Status") or "")
+        if status == "Active":
+            return aid
+        if status == "Failed":
+            raise AssetError("BytePlus не принял картинку как AI-портрет (Failed). " + json.dumps(info.get("Moderation") or info.get("Error") or {}, ensure_ascii=False)[:300])
+        time.sleep(3)
+    raise AssetError(f"Портрет не стал активным за 3 минуты (статус {status or 'неизвестен'}). ID: {aid}")
+
+
 def register_asset(body):
+    """Without a bucket the image goes inline as a data: URL (TOS needs enterprise
+    certification on personal accounts); with a bucket — via a presigned TOS link."""
     c = asset_cfg(body)
-    raw = base64.b64decode(body.get("image") or "", validate=False)
+    b64 = (body.get("image") or "").strip()
+    raw = base64.b64decode(b64, validate=False)
     if not raw:
         raise AssetError("Пустая картинка.")
     mime = body.get("mime") or "image/jpeg"
-    ext = {"image/png": "png", "image/webp": "webp"}.get(mime, "jpg")
     gid = ensure_group(c)
+    if not c["bucket"]:
+        try:
+            aid = create_and_wait(c, gid, f"data:{mime};base64,{b64}", body.get("name"))
+        except AssetError as e:
+            if re.search(r"URL|InvalidParameter|scheme|protocol", str(e), re.I):
+                raise AssetError("BytePlus не принимает картинку без ссылки (" + str(e)[:200] + "). Загрузи кадр в консоли вручную и впиши Asset ID в сцене, или подключи бакет.")
+            raise
+        return {"assetId": aid, "status": "Active", "groupId": gid, "via": "inline"}
+    ext = {"image/png": "png", "image/webp": "webp"}.get(mime, "jpg")
     key = f"video-projects/{uuid.uuid4().hex}.{ext}"
     tos_put(c, key, raw, mime)
     try:
         url = tos_presign_get(c["ak"], c["sk"], c["region"], f"{c['bucket']}.{c['tos']}", "/" + key, 3600, datetime.now(timezone.utc))
-        with _asset_lock:  # CreateAsset: 3 calls per minute on the Entry tier
-            wait = _last_create[0] + 21 - time.time()
-            if wait > 0:
-                time.sleep(wait)
-            _last_create[0] = time.time()
-            aid = str(openapi_call(c, "CreateAsset", {"GroupId": gid, "URL": url, "AssetType": "Image",
-                                                      "Name": (body.get("name") or "frame")[:60], "ProjectName": c["project"]}).get("Id") or "")
-        if not aid:
-            raise AssetError("CreateAsset не вернул ID.")
-        deadline = time.time() + 180
-        status = ""
-        while time.time() < deadline:
-            info = openapi_call(c, "GetAsset", {"Id": aid, "ProjectName": c["project"]})
-            status = str(info.get("Status") or "")
-            if status == "Active":
-                return {"assetId": aid, "status": status, "groupId": gid}
-            if status == "Failed":
-                raise AssetError("BytePlus не принял картинку как AI-портрет (Failed). " + json.dumps(info.get("Moderation") or {}, ensure_ascii=False)[:300])
-            time.sleep(3)
-        raise AssetError(f"Портрет не стал активным за 3 минуты (статус {status or 'неизвестен'}). ID: {aid}")
+        return {"assetId": create_and_wait(c, gid, url, body.get("name")), "status": "Active", "groupId": gid, "via": "tos"}
     finally:
         tos_delete(c, key)
 
@@ -279,13 +294,28 @@ def check_assets(body):
         out["ark"] = "ok"
     except AssetError as e:
         out["ark"] = str(e)
-    key = f"video-projects/check-{uuid.uuid4().hex}.txt"
-    try:
-        tos_put(c, key, b"ok", "text/plain")
-        tos_delete(c, key)
-        out["tos"] = "ok"
-    except AssetError as e:
-        out["tos"] = str(e)
+    if out["ark"] != "ok":
+        return out
+    if c["bucket"]:
+        key = f"video-projects/check-{uuid.uuid4().hex}.txt"
+        try:
+            tos_put(c, key, b"ok", "text/plain")
+            tos_delete(c, key)
+            out["tos"] = "ok"
+        except AssetError as e:
+            out["tos"] = str(e)
+        return out
+    # No bucket: try registering a small test picture inline, then remove it.
+    if body.get("testImage"):
+        try:
+            res = register_asset({**body, "image": body["testImage"], "mime": "image/jpeg", "name": "connection-check"})
+            out["inline"] = "ok"
+            try:
+                openapi_call(c, "DeleteAsset", {"Id": res["assetId"], "ProjectName": c["project"]})
+            except AssetError:
+                pass
+        except AssetError as e:
+            out["inline"] = str(e)
     return out
 
 
