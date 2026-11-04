@@ -12,6 +12,7 @@ Optional: keys can come from the environment instead of the page
 """
 import http.server
 import json
+import re
 import os
 import ssl
 import sys
@@ -26,6 +27,14 @@ PAGE = "Video_Projects_Local.html"
 OPENAI = "https://api.openai.com/v1"
 ARK_HOSTS = (".bytepluses.com", ".volces.com", ".byteplus.com", ".volccdn.com")
 MEDIA_HOSTS = ARK_HOSTS + (".openai.com", ".oaiusercontent.com", ".blob.core.windows.net")
+AMAZON_HOST = re.compile(r"(^|\.)amazon\.[a-z.]{2,10}$")
+AMAZON_SHORT = {"a.co", "amzn.to", "amzn.eu", "amzn.asia"}
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 ALLOWED_ORIGINS = {"null", f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"}
 TIMEOUT = 600
 
@@ -114,6 +123,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     break
                 self.wfile.write(chunk)
 
+    def amazon_page(self, url):
+        """Fetch an Amazon product page (HTML only) for the page to parse."""
+        def is_amazon(u):
+            p = urllib.parse.urlsplit(u)
+            host = (p.hostname or "").lower()
+            return p.scheme in ("http", "https") and (bool(AMAZON_HOST.search(host)) or host in AMAZON_SHORT)
+        if not is_amazon(url):
+            return self.error(400, "Нужна ссылка на страницу товара Amazon.")
+        req = urllib.request.Request(url, headers=BROWSER_HEADERS)
+        try:
+            with urllib.request.urlopen(req, timeout=30, context=CTX) as resp:
+                if not is_amazon(resp.geturl()):
+                    return self.error(400, "Ссылка ведёт не на Amazon.")
+                body = resp.read(6 * 1024 * 1024)
+                charset = resp.headers.get_content_charset() or "utf-8"
+        except urllib.error.HTTPError as e:
+            return self.error(502, f"Amazon ответил {e.code}.")
+        except Exception as e:
+            return self.error(502, f"Нет соединения с Amazon: {e}")
+        html = body.decode(charset, errors="replace")
+        if "captcha" in html.lower() and "productTitle" not in html:
+            return self.error(503, "Amazon показал проверку «я не робот».")
+        self.reply(200, html.encode("utf-8"), "text/html; charset=utf-8")
+
     # --- routes ---
     def do_OPTIONS(self):
         if not self.origin_ok():
@@ -160,6 +193,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "Bearer " + os.environ["ARK_API_KEY"] if os.environ.get("ARK_API_KEY") else None)
             tail = path.path[len("/api/ark"):]
             return self.forward(base + tail + (("?" + path.query) if path.query else ""), auth)
+        if path.path == "/api/page" and self.command == "GET":
+            return self.amazon_page(urllib.parse.parse_qs(path.query).get("url", [""])[0])
         if path.path == "/api/fetch" and self.command == "GET":
             url = urllib.parse.parse_qs(path.query).get("url", [""])[0]
             if not host_allowed(url, MEDIA_HOSTS):

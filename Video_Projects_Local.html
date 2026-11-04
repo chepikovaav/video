@@ -64,6 +64,11 @@
 .section-head .step-num{margin-right:4px}.section-head>div:first-child{display:flex;gap:10px;align-items:flex-start}
 .scene-tools{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
 #keysNotice .button-row{margin-top:8px}
+.video-estimate{font-size:12.5px;background:#f1f5ea;border-radius:7px;padding:8px 11px;margin:0 0 8px}
+.amazon-row{display:flex;gap:8px;align-items:stretch}.amazon-row input{flex:1;min-width:0}
+#amazonBox{margin-top:8px;font-size:12px}#amazonBox summary{cursor:pointer;color:var(--muted);font-weight:650}#amazonText{margin-top:8px;font-size:12.5px;min-height:150px}
+#amazonStatus{margin:6px 0 0}#amazonStatus.error{color:#a3392d}
+#videoSummary{font-size:12px}
 .key-field label{color:var(--warn)}.key-field input,.key-field textarea{border-color:#d9b46a;background:#fffbf0}
 .ledger{font:11px/1.6 ui-monospace,Menlo,monospace;background:#f5f7f2;border-radius:8px;padding:10px 12px;max-height:260px;overflow:auto;white-space:pre-wrap;margin:10px 0 0}
 .vid-cost{font-size:11.5px;color:var(--ink);background:#f1f5ea;border-radius:6px;padding:5px 8px;margin:0}.vid-cost:empty{display:none}
@@ -88,11 +93,12 @@
 <div class="field"><label for="bulk">Скрипт</label><div class="bulk-head"><p class="muted">Пустая строка разделяет сцены. Ручные выделения титров: <code>*важные слова*</code>.</p><select id="separator" aria-label="Разделитель сцен"><option value="auto">Сцены: определить автоматически</option><option value="paragraphs">Пустая строка между сценами</option><option value="lines">Каждая строка — новая сцена</option><option value="numbered">Нумерация 1. / 2. / 3.</option></select></div><textarea id="bulk" spellcheck="false" placeholder="Вставь текст ролика. Между сценами оставь пустую строку."></textarea><div class="import-options"><label><input type="checkbox" id="autoHighlight" checked>Подобрать выделения</label><label><input type="checkbox" id="autoWrap" checked>Разбить длинный блок на две строки</label></div><p class="muted" id="bulkHint"></p></div>
 <div class="field"><label>Фото продукта <span class="muted" id="photoCount"></span></label><div class="dropzone" id="photoDrop" tabindex="0" role="button" aria-label="Добавить фото продукта"><div class="thumbs" id="photoThumbs"></div><p id="photoHint"></p></div><input type="file" id="photoFile" accept="image/*" multiple hidden></div>
 <div class="field"><label>Референсы окружения <span class="muted">необязательно, до 10 — как продукт выглядит в реальной обстановке</span> <span class="muted" id="envCount"></span></label><div class="dropzone" id="envDrop" tabindex="0" role="button" aria-label="Добавить референсы окружения"><div class="thumbs" id="envThumbs"></div><p id="envHint"></p></div><input type="file" id="envFile" accept="image/*" multiple hidden></div>
+<div class="field"><label for="amazonUrl">Ссылка на Amazon <span class="muted">необязательно — оттуда берутся название, характеристики и размеры продукта</span></label><div class="amazon-row"><input id="amazonUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="https://www.amazon.com/dp/…"><button type="button" class="small" id="amazonLoad">Загрузить данные</button></div><p class="muted" id="amazonStatus" role="status" aria-live="polite"></p><details id="amazonBox" hidden><summary>Данные с Amazon — посмотреть и поправить</summary><textarea id="amazonText" maxlength="8000" spellcheck="false"></textarea></details></div>
 <div class="button-row start-row"><button type="button" id="aiStart" class="primary big">Начать</button><button type="button" id="aiStop" class="small" hidden>Остановить</button><button id="apply" type="button" class="small" title="Без анализа и генерации картинок">Только разбить на сцены</button><span id="bulkStatus" class="muted" role="status"></span></div>
-<ol class="pipeline" id="pipeline" hidden><li data-step="analyze">Анализ продукта по фото</li><li data-step="split">Разбивка скрипта на сцены</li><li data-step="plan">Решение по сценам: человек с продуктом или продукт в окружении</li><li data-step="images">Генерация картинок</li></ol><p class="muted" id="pipeStatus" role="status" aria-live="polite"></p>
+<ol class="pipeline" id="pipeline" hidden><li data-step="amazon">Данные продукта с Amazon</li><li data-step="analyze">Анализ продукта по фото</li><li data-step="split">Разбивка скрипта на сцены</li><li data-step="plan">Решение по сценам: человек с продуктом или продукт в окружении</li><li data-step="images">Генерация картинок</li></ol><p class="muted" id="pipeStatus" role="status" aria-live="polite"></p>
 <input type="file" id="aiFrameFile" accept="image/*" hidden></section>
 <section class="panel step" id="stepAnalysis" aria-labelledby="stepAnalysisTitle" hidden><div class="step-head"><span class="step-num">2</span><div><h2 id="stepAnalysisTitle">Описание продукта</h2><p class="muted">Результат анализа фото. Поправь, если что-то не так — особенно размер и назначение (выделены).</p></div><button type="button" class="small" id="aiReanalyze">Проанализировать заново</button></div><div class="ai-grid" id="analysisFields"></div><p class="muted" id="analysisStatus" role="status"></p></section>
-<div class="section-head"><div><span class="step-num">3</span><div><h2 id="countLabel">Сцены</h2><p class="muted">Текст титра · картинка · видео. Видео — только после одобрения картинки.</p></div></div><div class="scene-tools"><span class="badge" id="arkBalance" title="Подробнее — во вкладке «Настройки»"></span><button type="button" id="aiMissing" class="small">Догенерировать недостающие картинки</button><button type="button" id="aiZip" class="small">Скачать кадры и видео .zip</button><button type="button" id="highlightAll" class="small">Автовыделения титров</button></div></div><div id="cards" class="cards"></div><div class="add-row"><button type="button" id="add">＋ Добавить сцену</button></div>
+<div class="section-head"><div><span class="step-num">3</span><div><h2 id="countLabel">Сцены</h2><p class="muted">Текст титра · картинка · видео. Видео — только после одобрения картинки.</p></div></div><div class="scene-tools"><button type="button" class="linklike" id="videoSummary" title="Изменить во вкладке «Настройки»"></button><span class="badge" id="arkBalance" title="Подробнее — во вкладке «Настройки»"></span><button type="button" id="aiMissing" class="small">Догенерировать недостающие картинки</button><button type="button" id="aiZip" class="small">Скачать кадры и видео .zip</button><button type="button" id="highlightAll" class="small">Автовыделения титров</button></div></div><div id="cards" class="cards"></div><div class="add-row"><button type="button" id="add">＋ Добавить сцену</button></div>
 <details class="help"><summary>Сохранение, импорт и работа с проектами</summary><p><strong>Сохранить ролик .json</strong> — переносимый файл с текстами, выделениями, длительностями и настройками его проекта. <strong>Сохранить все проекты</strong> — резервная копия всей библиотеки, включая NXA, POE и новые проекты.</p><p><strong>Импорт JSON / DRT / TXT</strong> открывает черновики v2–v5, планы сцен и резервные копии v5. Импорт добавляет ролики, не перезаписывая существующие. TXT загружается отдельным роликом с сохранением звёздочек, без принудительного автоподбора.</p><p><strong>Импорт DRT в это приложение</strong> поддерживает только совместимые титры NXA с 25 fps, включая файлы, созданные редактором. Восстанавливаются тексты, диапазоны выделений, шрифт, цвета и длительности. Длительности становятся ручными; кнопка «Авто» возвращает расчёт. Цвета выделений при новом экспорте назначаются по порядку фраз: первое и второе; пустой первый диапазон исходника не сохраняется. Видео, музыка, другие эффекты, произвольные шаблоны, зазоры и наложения титров не восстанавливаются. Для полного переноса внутри редактора надёжнее JSON.</p><p><strong>Экспорт .drt</strong> подготавливает файл. В отдельном окне браузера выбери «Сохранить файл…» (если поддерживается браузером) или «Скачать .drt». Встроенный предпросмотр для скачивания не используется. Сообщение «Файл сохранён» выводится только после подтверждённой записи через диалог сохранения. Обычное скачивание не даёт странице такого подтверждения.</p><p><strong>Импорт DRT в DaVinci</strong> — отдельное действие в Resolve: <strong>File → Import → Timeline</strong>. Эта HTML-страница не открывает Resolve и не импортирует туда автоматически.</p><p>Настройки профиля применяются при новом экспорте его роликов. Ранее сохранённые .drt не меняются. Другой шрифт можно использовать на основе NXA; другой тип титра, тень или анимация требуют адаптера по образцу .drt. Профиль POE сейчас хранит пожелания, но не выдаёт приблизительный NXA-титр за готовый POE.</p><p>Автосохранение хранится в браузере, не в HTML-файле. Очистка данных, другой браузер или новое имя HTML могут его сбросить. Перед переходом на новую версию сохрани JSON и импортируй его в новую страницу.</p></details>
 <details class="help"><summary>Как работают выделения и длительности</summary><p>Кнопка «Подобрать выделения» читает актуальный текст. Результат появляется рядом с ней. Если те же слова уже выделены, об этом явно написано; повторное нажатие не генерирует случайный новый вариант. Если правила не нашли фразу, существующие выделения не удаляются.</p><p>Можно поставить <code>*звёздочки*</code> вручную или выделить слова мышкой в поле и нажать «Выделить выбранное». Старые <code>**двойные звёздочки**</code> также поддерживаются.</p><p>Подбор ориентирован на твои примеры: полное название товара во вступлении, затем польза и целые фразы; две характеристики выделяются, когда образуют смысловую пару. Это набор правил, не обученная модель. Он не понимает все товары и языки.</p><p><code>секунды = max(2,52; 0,309826 + 0,051692 × символы)</code>, затем выбранный запас и округление до кадра при 25 fps. Это оценка по семи NXA-титрам. Для POE пока используется тот же темп, не отдельная калибровка. От 1 до 100 сцен; до 600 символов в одном экспортируемом титре.</p><p>Название ролика становится названием .drt и таймлайна. Проект в библиотеке самого Resolve приложение не переименовывает. Размер шрифта не уменьшается автоматически, длинные строки нужно проверить в Resolve.</p><div class="button-row"><button type="button" id="planExport" class="small">Сохранить план сцен .json</button><button type="button" id="saveText" class="small">Сохранить скрипт .txt</button></div></details>
 <p class="legal">v6.0 · 1920 × 1080 · 25 fps · старт 01:00:00:00. Предпросмотр условный, шрифты не встроены. Новые параметры и импорт .drt требуют просмотра в Resolve. Сетевые запросы — только к OpenAI и Seedance по кнопкам «Начать» и генерации в сценах; ключи хранятся в этом браузере. Нет установки агента или доступа к экрану. Встроенная копия исходного шаблона содержит частные названия и пути: не публикуй этот HTML как обезличенный файл.</p>
@@ -103,15 +109,17 @@
 <div><label for="aiImageModel">Модель для изображений</label><select id="aiImageModel"><option value="gpt-image-2">GPT Image 2 — новейшая, лучшее качество</option><option value="gpt-image-1.5">GPT Image 1.5</option><option value="gpt-image-1">GPT Image 1</option><option value="gpt-image-1-mini">GPT Image 1 mini — дешевле</option><option value="__custom">Свой ID…</option></select><input id="aiImageModelCustom" class="ai-custom" autocomplete="off" spellcheck="false" placeholder="ID модели OpenAI" hidden></div>
 <div><label for="aiVisionModel">Модель для анализа фото (vision)</label><select id="aiVisionModel"><option value="gpt-5-mini">GPT-5 mini — быстро и недорого</option><option value="gpt-5">GPT-5 — точнее</option><option value="gpt-4.1">GPT-4.1</option><option value="gpt-4.1-mini">GPT-4.1 mini</option><option value="gpt-4o">GPT-4o</option><option value="__custom">Свой ID…</option></select><input id="aiVisionModelCustom" class="ai-custom" autocomplete="off" spellcheck="false" placeholder="ID модели OpenAI" hidden></div>
 <div><label for="aiImageQuality">Качество картинок</label><select id="aiImageQuality"><option value="high">Высокое — финальные кадры</option><option value="medium">Среднее</option><option value="low">Низкое — дёшево, черновик</option><option value="auto">Авто</option></select></div>
-<h3 class="wide">Seedance · видео из картинки</h3>
+<h3 class="wide">Видео · Seedance</h3>
 <div class="wide"><label for="aiArkKey">ModelArk API key</label><input id="aiArkKey" type="password" autocomplete="off" spellcheck="false"></div>
 <div><label for="aiArkBase">Платформа</label><select id="aiArkBase"><option value="https://ark.ap-southeast.bytepluses.com/api/v3">BytePlus ModelArk (международная)</option><option value="https://ark.cn-beijing.volces.com/api/v3">Volcengine Ark (Китай)</option></select></div>
-<div class="wide"><label for="aiVideoModel">Модель Seedance</label><select id="aiVideoModel"><option value="dreamina-seedance-2-0-260128">Seedance 2.0 · dreamina-seedance-2-0-260128</option><option value="dreamina-seedance-2-0-fast-260128">Seedance 2.0 Fast · dreamina-seedance-2-0-fast-260128</option><option value="dreamina-seedance-2-0-mini-260615">Seedance 2.0 Mini · dreamina-seedance-2-0-mini-260615</option><option value="__custom">Свой Model ID…</option></select><input id="aiVideoModelCustom" class="ai-custom" autocomplete="off" spellcheck="false" placeholder="Model ID из консоли ModelArk" hidden></div>
-<h3 class="wide">Параметры генерации</h3>
-<div><label for="aiFormat">Формат кадра</label><select id="aiFormat"><option value="9:16">9:16 — вертикальный</option><option value="16:9">16:9 — горизонтальный</option><option value="1:1">1:1 — квадрат</option></select></div>
-<div><label for="aiDuration">Длительность видео, с</label><input id="aiDuration" type="number" min="2" max="15" step="1"></div>
-<div><label for="aiResolution">Разрешение видео</label><select id="aiResolution"><option>720p</option><option>1080p</option><option>480p</option></select></div>
-<div class="wide"><label class="ai-check"><input type="checkbox" id="aiAudio">Звук от модели (Seedance 1.5+; обычно не нужен — озвучка в Resolve)</label><label class="ai-check"><input type="checkbox" id="aiWatermark">Водяной знак Seedance</label><label class="ai-check"><input type="checkbox" id="aiLegacy">Параметры текстом в промпте (для старых моделей Seedance 1.0)</label><p class="muted">Таймлайн .drt остаётся 1920 × 1080: вертикальные видео в Resolve нужно масштабировать или поставить проект 1080 × 1920.</p></div>
+<div class="wide"><label for="aiVideoModel">Модель для видео</label><select id="aiVideoModel"><option value="dreamina-seedance-2-0-260128">Seedance 2.0 · dreamina-seedance-2-0-260128</option><option value="dreamina-seedance-2-0-fast-260128">Seedance 2.0 Fast · dreamina-seedance-2-0-fast-260128</option><option value="dreamina-seedance-2-0-mini-260615">Seedance 2.0 Mini · dreamina-seedance-2-0-mini-260615</option><option value="__custom">Свой Model ID…</option></select><input id="aiVideoModelCustom" class="ai-custom" autocomplete="off" spellcheck="false" placeholder="Model ID из консоли ModelArk" hidden></div>
+<div><label for="aiResolution">Разрешение</label><select id="aiResolution"><option value="480p">480p — черновик, дешевле всего</option><option value="720p">720p</option><option value="1080p">1080p — финал, дороже всего</option></select></div>
+<div><label for="aiAudio">Звук</label><select id="aiAudio"><option value="0">Без звука</option><option value="1">Со звуком — звук генерирует модель</option></select></div>
+<div><label for="aiDuration">Длительность, с</label><input id="aiDuration" type="number" min="2" max="15" step="1"></div>
+<div class="wide"><p class="video-estimate" id="videoEstimate"></p><label class="ai-check"><input type="checkbox" id="aiWatermark">Водяной знак Seedance</label><label class="ai-check"><input type="checkbox" id="aiLegacy">Параметры текстом в промпте (для старых моделей Seedance 1.0)</label></div>
+<h3 class="wide">Формат кадра</h3>
+<div><label for="aiFormat">Формат картинок и видео</label><select id="aiFormat"><option value="9:16">9:16 — вертикальный</option><option value="16:9">16:9 — горизонтальный</option><option value="1:1">1:1 — квадрат</option></select></div>
+<div class="wide"><p class="muted">Таймлайн .drt остаётся 1920 × 1080: вертикальные видео в Resolve нужно масштабировать или поставить проект 1080 × 1920.</p></div>
 <h3 class="wide">Баланс и расходы Seedance</h3>
 <div class="wide"><p><span class="badge" id="arkBalanceSettings">—</span></p><p class="muted">Ключ ModelArk даёт доступ только к генерации: остаток пакета через него не узнать. Поэтому приложение ведёт учёт само — вычитает стоимость каждого готового видео из суммы пакета по числу токенов, которое возвращает Seedance. Сверяй с консолью BytePlus: Billing → Savings Plans.</p></div>
 <div><label for="aiBudget">Сумма пакета, USD</label><input id="aiBudget" type="number" min="0" step="1" placeholder="Например, 30"></div>
@@ -801,7 +809,7 @@ async function importDRT(bytes,fileName){
 const $=id=>document.getElementById(id),fmt=x=>Number(x).toFixed(2).replace('.',',');
 const STORAGE_KEY='nastya-titles-workspace-v5';
 let workspace,scenes=[],currentProfileId='nxa',currentJobId='',undoStack=[],persistTimer=null,storageOK=false,busy=false,editorMode='edit';
-function emptyJob(profileId,name='Новый ролик'){return {id:uuid(),profileId,name,mode:'flexible',factor:1,scenes:[{text:'',manual:null}],bulk:'',separator:'auto',autoHighlight:true,autoWrap:true,aiPhotos:[],aiEnvRefs:[],aiAnalysis:null,aiAnalysisSig:''};}
+function emptyJob(profileId,name='Новый ролик'){return {id:uuid(),profileId,name,mode:'flexible',factor:1,scenes:[{text:'',manual:null}],bulk:'',separator:'auto',autoHighlight:true,autoWrap:true,aiPhotos:[],aiEnvRefs:[],aiAmazonUrl:'',aiAmazon:'',aiAmazonFrom:'',aiAnalysis:null,aiAnalysisSig:''};}
 function initialWorkspace(){const nxa=emptyJob('nxa','EPCD-2003');nxa.scenes=T.original.map(text=>({text,manual:null}));const poe=emptyJob('poe','Новый ролик POE');return {format:'nastya-workspace-v5',version:5,profiles:[copy(DEFAULT_NXA),copy(DEFAULT_POE)],jobs:[nxa,poe],activeProfileId:'nxa',activeJobId:nxa.id,lastJobByProfile:{nxa:nxa.id,poe:poe.id}};}
 function draftScenes(value){
  const list=normalizeScenes(value);
@@ -813,7 +821,7 @@ function normalizeJob(o,profileId){
  const name=cleanString(String(o.name??o.projectName??'Новый ролик'),'Название ролика',120,true)||'Новый ролик';
  if(!['flexible','original'].includes(o.mode||'flexible')||![1,1.15,1.3].includes(Number(o.factor??1)))throw Error('Неверные настройки длительностей.');
  const bulk=String(o.bulk||'');if(bulk.length>200000)throw Error('Слишком большой скрипт.');
- return {id,profileId,name,mode:o.mode||'flexible',factor:Number(o.factor??1),scenes:draftScenes(o.scenes),bulk,separator:['auto','paragraphs','lines','numbered'].includes(o.separator)?o.separator:'auto',autoHighlight:o.autoHighlight!==false,autoWrap:o.autoWrap!==false,aiPhotos:normalizePhotos(o.aiPhotos,o.aiRef),aiEnvRefs:normalizePhotos(o.aiEnvRefs,o.aiEnvRef),aiAnalysis:normalizeAnalysis(o.aiAnalysis),aiAnalysisSig:typeof o.aiAnalysisSig==='string'?o.aiAnalysisSig.slice(0,2200):''};
+ return {id,profileId,name,mode:o.mode||'flexible',factor:Number(o.factor??1),scenes:draftScenes(o.scenes),bulk,separator:['auto','paragraphs','lines','numbered'].includes(o.separator)?o.separator:'auto',autoHighlight:o.autoHighlight!==false,autoWrap:o.autoWrap!==false,aiPhotos:normalizePhotos(o.aiPhotos,o.aiRef),aiEnvRefs:normalizePhotos(o.aiEnvRefs,o.aiEnvRef),aiAmazonUrl:typeof o.aiAmazonUrl==='string'?o.aiAmazonUrl.slice(0,2000):'',aiAmazon:typeof o.aiAmazon==='string'?o.aiAmazon.slice(0,8000):'',aiAmazonFrom:typeof o.aiAmazonFrom==='string'?o.aiAmazonFrom.slice(0,2000):'',aiAnalysis:normalizeAnalysis(o.aiAnalysis),aiAnalysisSig:typeof o.aiAnalysisSig==='string'?o.aiAnalysisSig.slice(0,2200):''};
 }
 function validateWorkspace(o){
  if(!o||o.format!=='nastya-workspace-v5'||!Array.isArray(o.profiles)||!o.profiles.length||o.profiles.length>100||!Array.isArray(o.jobs)||o.jobs.length>500)throw Error('Неверный файл библиотеки проектов.');
@@ -1072,7 +1080,7 @@ const ANALYZE_SYSTEM='Ты анализируешь фото продукта д
  '"proportions" (соотношение высоты, ширины и глубины, например «высота : ширина : глубина ≈ 1 : 1 : 0,2»), "shape" (форма), "colors", "materials", "logo_present" (true/false), "logo_location" (где именно на продукте логотип), "logo_text" (текст логотипа точно как на продукте), '+
  '"details" (кнопки, надписи, фактуры и другие детали, которые важно сохранить), "environment" (общая обстановка для кадров: из референсов окружения, если они есть; иначе типичная реальная обстановка по назначению продукта), '+
  '"env_list" (только если есть референсы окружения: по одной строке на каждый референс по порядку, формат «1: короткое описание обстановки»; иначе пустая строка). '+
- 'Значения — короткие точные фразы на русском, кроме текста логотипа. Не выдумывай то, чего не видно; размер всегда давай как оценку.';
+ 'Если даны данные со страницы Amazon, размер бери из них и укажи «по данным Amazon». Значения — короткие точные фразы на русском, кроме текста логотипа. Не выдумывай то, чего не видно; размер без данных Amazon давай как оценку.';
 const PLAN_SYSTEM='You plan shots for a product advertising video. For each scene decide whether its benefit is best shown by a real person naturally using the product (people: true) or by the product alone in a fitting real-life environment (people: false). '+
  'Write "shot": one or two English sentences describing the concrete visual for that scene (setting, action, framing, camera angle) that shows the scene\'s specific benefit. Keep the environment consistent across scenes and vary the framing. '+
  'If environment references are listed, pick for each scene "env": the numbers of the 1–2 references that best fit it (empty array if none fit). '+
@@ -1092,7 +1100,7 @@ function normalizeAI(a){
  const str=(v,m)=>typeof v==='string'&&v.length<=m?v:'',bool=v=>v===true||v===false?v:null;
  return {uid:mediaId(a.uid)||uuid(),shot:str(a.shot,2000),planPeople:bool(a.planPeople),env:Array.isArray(a.env)?a.env.map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=10).slice(0,2):[],envPlanned:a.envPlanned===true,people:bool(a.people),imgPrompt:str(a.imgPrompt,8000),vidPrompt:str(a.vidPrompt,8000),
   image:mediaId(a.image),video:mediaId(a.video),videoUrl:/^https:\/\//.test(a.videoUrl||'')?str(a.videoUrl,4000):'',task:mediaId(a.task),vidModel:str(a.vidModel,120),vidRes:str(a.vidRes,10),vidRatio:str(a.vidRatio,10),vidDur:Number.isFinite(a.vidDur)?a.vidDur:0,
-  vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true};
+  vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true,vidAudio:a.vidAudio===true};
 }
 function normalizeAnalysis(a){
  if(!a||typeof a!=='object'||Array.isArray(a))return null;const out={};
@@ -1101,7 +1109,8 @@ function normalizeAnalysis(a){
 }
 function normalizePhotos(list,legacy){const a=(Array.isArray(list)?list:legacy?[legacy]:[]).map(mediaId).filter(Boolean);return [...new Set(a)].slice(0,MAX_PHOTOS);}
 function aiOf(s){if(!s.ai)s.ai=normalizeAI({});return s.ai;}
-function photoSig(j){return [...(j.aiPhotos||[]),'env',...(j.aiEnvRefs||[])].join('|');}
+function textHash(t){let h=0;for(const c of String(t||''))h=(h*31+c.codePointAt(0))|0;return (h>>>0).toString(36);}
+function photoSig(j){return [...(j.aiPhotos||[]),'env',...(j.aiEnvRefs||[]),'amz:'+textHash(j.aiAmazon)].join('|');}
 
 // --- media storage (IndexedDB) ---
 const mediaDB=(()=>{let p;
@@ -1226,6 +1235,7 @@ async function analyzeProduct(j){
  const env=(await Promise.all((j.aiEnvRefs||[]).map(getBlob))).filter(Boolean);
  const content=[{type:'text',text:'Фото продукта ('+photos.length+' шт.):'}];for(const b of photos)content.push(await imgPart(b,'high'));
  if(env.length){content.push({type:'text',text:'Референсы окружения ('+env.length+' шт.) — как продукт выглядит в реальной обстановке, по порядку:'});for(const [k,b] of env.entries())content.push({type:'text',text:'Референс '+(k+1)+':'},await imgPart(b,'low'));}
+ const amz=String(j.aiAmazon||'').trim();if(amz)content.push({type:'text',text:'Данные со страницы товара на Amazon. Бери из них название, назначение и особенно размеры (переведи дюймы и фунты в сантиметры и килограммы); внешний вид проверяй по фото:\n'+amz.slice(0,8000)});
  const script=(j.bulk||'').trim();if(script)content.push({type:'text',text:'Скрипт ролика (для контекста):\n'+script.slice(0,4000)});
  content.push({type:'text',text:'Верни JSON с описанием продукта.'});
  const r=normalizeAnalysis(await chatJSON([{role:'system',content:ANALYZE_SYSTEM},{role:'user',content}]));
@@ -1288,7 +1298,7 @@ async function createVideoTask(uid){
 }
 async function runVideo(uid){
  if(vidBusy.has(uid)||imgBusy.has(uid))return false;vidBusy.add(uid);setMsg(uid,'vid','run','Отправляю картинку в Seedance…');
- try{const id=await createVideoTask(uid);patchAI(uid,{task:id,video:'',videoUrl:'',vidModel:String(aiSettings.videoModel||'').trim(),vidRes:aiSettings.resolution,vidRatio:aiSettings.format,vidDur:Math.round(Number(aiSettings.duration)||5),vidTokens:null,vidCost:null,vidEst:false});vidBusy.delete(uid);pollVideo(uid,id);return true;}
+ try{const id=await createVideoTask(uid);patchAI(uid,{task:id,video:'',videoUrl:'',vidModel:String(aiSettings.videoModel||'').trim(),vidRes:aiSettings.resolution,vidAudio:!!aiSettings.audio,vidRatio:aiSettings.format,vidDur:Math.round(Number(aiSettings.duration)||5),vidTokens:null,vidCost:null,vidEst:false});vidBusy.delete(uid);pollVideo(uid,id);return true;}
  catch(e){vidBusy.delete(uid);setMsg(uid,'vid','error',e.message);return false;}
 }
 async function pollVideo(uid,id){
@@ -1352,7 +1362,7 @@ function renderBalance(){
 function renderLedgerList(){$('aiLedgerList').textContent=ledger.entries.length?ledger.entries.slice().reverse().map(e=>new Date(e.at).toLocaleString('ru-RU',{dateStyle:'short',timeStyle:'short'})+' · '+modelName(e.model)+' · '+e.res+' '+e.ratio+' '+e.dur+' с · '+(e.est?'≈':'')+fmtTok(e.tokens)+' ток. · '+fmtUSD(e.cost)+(e.project?' · '+e.project:'')).join('\n'):'Пока нет готовых видео.';}
 function costLine(a){
  if(a.vidTokens==null)return '';
- return modelName(a.vidModel)+' · '+a.vidRes+' · '+a.vidDur+' с — '+(a.vidEst?'≈':'')+fmtTok(a.vidTokens)+' токенов · '+(a.vidEst?'≈':'')+fmtUSD(a.vidCost||0)+(a.vidEst?' (оценка: Seedance не вернул число токенов)':'');
+ return modelName(a.vidModel)+' · '+a.vidRes+' · '+(a.vidAudio?'со звуком':'без звука')+' · '+a.vidDur+' с — '+(a.vidEst?'≈':'')+fmtTok(a.vidTokens)+' токенов · '+(a.vidEst?'≈':'')+fmtUSD(a.vidCost||0)+(a.vidEst?' (оценка: Seedance не вернул число токенов)':'');
 }
 
 // --- pipeline («Начать») ---
@@ -1381,7 +1391,7 @@ async function ensureAnalysis(j){
  try{j.aiAnalysis=await analyzeProduct(j);j.aiAnalysisSig=photoSig(j);persist();renderAnalysis();pipeStep('analyze','done');}
  catch(e){pipeStep('analyze','error');throw e;}
 }
-function resetPipeline(){$('pipeline').hidden=false;for(const st of ['analyze','split','plan','images'])pipeStep(st,'wait');}
+function resetPipeline(){$('pipeline').hidden=false;for(const st of ['amazon','analyze','split','plan','images'])pipeStep(st,'wait');document.querySelector('#pipeline [data-step="amazon"]').hidden=!String(job().aiAmazonUrl||'').trim();}
 async function startPipeline(){
  if(aiRunning)return;
  const j=job();stash();
@@ -1391,6 +1401,7 @@ async function startPipeline(){
  if(scenes.some(s=>s.ai?.image||s.ai?.video||s.ai?.videoUrl)&&!confirm('Начать заново? Сцены пересоберутся из скрипта, текущие картинки и видео будут заменены.'))return;
  setRunning(true);aiStop=false;resetPipeline();
  try{
+  await ensureAmazon(j);if(aiStop)throw STOPPED;
   await ensureAnalysis(j);if(aiStop)throw STOPPED;
   pipeStep('split','run');checkpoint();if($('mode').value==='original'&&result.list.length!==7)$('mode').value='flexible';
   scenes=normalizeScenes(result.list).map(s=>({text:s.text,manual:s.manual,ai:normalizeAI({}),id:uuid()}));renderCards();markDirty();
@@ -1406,7 +1417,7 @@ async function fillMissing(){
  if(!targets.length){setStatus('У всех сцен уже есть картинки.');return;}
  if(!hasKey('openai'))throw Error('Нет ключа OpenAI. Укажи его во вкладке «Настройки».');
  setRunning(true);aiStop=false;resetPipeline();pipeStep('split','done');
- try{if(j.aiPhotos.length)await ensureAnalysis(j);else pipeStep('analyze','done');if(aiStop)throw STOPPED;await generateImages(targets,j);}
+ try{if(j.aiPhotos.length){await ensureAmazon(j);await ensureAnalysis(j);}else pipeStep('analyze','done');if(aiStop)throw STOPPED;await generateImages(targets,j);}
  catch(e){pipeMsg(e.message,e!==STOPPED);setStatus(e.message,e!==STOPPED);}
  finally{setRunning(false);}
 }
@@ -1473,7 +1484,7 @@ function renderAnalysis(){
  }
  refreshAnalysisNote();
 }
-function refreshAnalysisNote(){const j=job(),n=$('analysisStatus');if(!j?.aiAnalysis)return;n.classList.toggle('error',j.aiAnalysisSig!==photoSig(j));n.textContent=j.aiAnalysisSig!==photoSig(j)?'Фото изменились после анализа. При «Начать» анализ выполнится заново, ручные правки заменятся.':'Описание подставляется в промпт каждой картинки: {product}, {size} и {environment}. Особенно проверь размер и назначение — от них зависят масштаб продукта и сюжет кадров.';}
+function refreshAnalysisNote(){const j=job(),n=$('analysisStatus');if(!j?.aiAnalysis)return;n.classList.toggle('error',j.aiAnalysisSig!==photoSig(j));n.textContent=j.aiAnalysisSig!==photoSig(j)?'Фото или данные с Amazon изменились после анализа. При «Начать» анализ выполнится заново, ручные правки заменятся.':'Описание подставляется в промпт каждой картинки: {product}, {size} и {environment}. Особенно проверь размер и назначение — от них зависят масштаб продукта и сюжет кадров.';}
 $('analysisFields').addEventListener('input',e=>{const k=e.target.dataset.field,j=job();if(!k||!j.aiAnalysis)return;j.aiAnalysis[k]=k==='logo_present'?e.target.value==='1':e.target.value;markDirty();});
 $('analysisFields').addEventListener('change',e=>{if(e.target.dataset.field==='logo_present'){job().aiAnalysis.logo_present=e.target.value==='1';markDirty();}});
 
@@ -1569,7 +1580,7 @@ $('aiZip').addEventListener('click',async()=>{
   download(zipStored(entries),base+' — кадры и видео.zip','application/zip');setStatus('Архив подготовлен: '+entries.length+' файлов.');
  }catch(e){setStatus(e.message,true);}
 });
-function aiLoadJob(){renderPhotos();renderAnalysis();applyFormat();const j=job();$('pipeline').hidden=true;pipeMsg('');}
+function aiLoadJob(){renderAmazon();renderPhotos();renderAnalysis();applyFormat();const j=job();$('pipeline').hidden=true;pipeMsg('');}
 function applyFormat(){$('cards').style.setProperty('--ar',aiSettings.format.replace(':',' / '));}
 
 // --- settings tab ---
@@ -1581,7 +1592,7 @@ function showTab(t){
 document.querySelectorAll('[data-tab-btn]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tabBtn)));
 $('keysGo').addEventListener('click',()=>showTab('settings'));
 function refreshKeysNotice(){$('keysNotice').hidden=!!String(aiSettings.openaiKey).trim()||!!aiProxy;}
-const aiFields={aiOpenaiKey:'openaiKey',aiImageQuality:'imageQuality',aiFormat:'format',aiArkKey:'arkKey',aiArkBase:'arkBase',aiResolution:'resolution',aiDuration:'duration',aiAudio:'audio',aiWatermark:'watermark',aiLegacy:'legacyFlags',aiStyle:'style'};
+const aiFields={aiOpenaiKey:'openaiKey',aiImageQuality:'imageQuality',aiFormat:'format',aiArkKey:'arkKey',aiArkBase:'arkBase',aiResolution:'resolution',aiDuration:'duration',aiWatermark:'watermark',aiLegacy:'legacyFlags',aiStyle:'style'};
 for(const [id,k] of Object.entries(aiFields)){const el=$(id);
  if(el.type==='checkbox')el.checked=!!aiSettings[k];else el.value=aiSettings[k];
  el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',()=>{aiSettings[k]=el.type==='checkbox'?el.checked:el.type==='number'?Number(el.value):el.value;saveAISettings();if(k==='format')applyFormat();if(k==='openaiKey')refreshKeysNotice();});
@@ -1616,6 +1627,86 @@ for(const [id,key,def] of [['tplImage','tplImage',TPL_IMAGE],['tplVidPeople','tp
  ta.addEventListener('input',()=>{aiSettings[key]=ta.value.trim()===def.trim()?'':ta.value;saveAISettings();});
  $(id+'Reset').addEventListener('click',()=>{ta.value=def;aiSettings[key]='';saveAISettings();setStatus('Шаблон восстановлен.');});
 }
+
+// --- Amazon product page ---
+// Browsers cannot read amazon.com directly (CORS). With ai_server.py running the
+// page is fetched locally and parsed here; otherwise OpenAI web search reads it.
+const AMAZON_SHORT=new Set(['a.co','amzn.to','amzn.eu','amzn.asia']);
+function amazonURL(v){
+ let u;try{u=new URL(String(v||'').trim());}catch{throw Error('Это не похоже на ссылку. Скопируй адрес страницы товара на Amazon.');}
+ const h=u.hostname.toLowerCase();if(!/(^|\.)amazon\.[a-z.]{2,10}$/.test(h)&&!AMAZON_SHORT.has(h))throw Error('Нужна ссылка на страницу товара Amazon (amazon.com, amazon.de, a.co …).');
+ u.protocol='https:';u.hash='';return u.href;
+}
+function parseAmazonHTML(html){
+ const d=new DOMParser().parseFromString(html,'text/html'),clean=t=>String(t||'').replace(/[‎‏ ]/g,' ').replace(/\s+/g,' ').trim();
+ const title=clean(d.querySelector('#productTitle')?.textContent);if(!title)return '';
+ const lines=['Название: '+title];
+ const brand=clean(d.querySelector('#bylineInfo')?.textContent);if(brand)lines.push('Бренд: '+brand.replace(/^(Visit the|Brand:)\s*/i,'').replace(/\s*Store$/i,''));
+ const rows=new Map();
+ for(const tr of d.querySelectorAll('#productDetails_techSpec_section_1 tr,#productDetails_techSpec_section_2 tr,#productDetails_detailBullets_sections1 tr,#productOverview_feature_div tr,#tech tr,.prodDetTable tr')){const k=clean(tr.querySelector('th,td:first-child')?.textContent),v=clean(tr.querySelector('td:last-child')?.textContent);if(k&&v&&k!==v&&!/customer reviews|best sellers rank/i.test(k))rows.set(k,v);}
+ for(const li of d.querySelectorAll('#detailBullets_feature_div li')){const t=clean(li.textContent),m=/^([^:]{2,60}?)\s*:\s*(.+)$/.exec(t);if(m&&!/customer reviews|best sellers rank/i.test(m[1]))rows.set(m[1],m[2]);}
+ if(rows.size)lines.push('Характеристики:',...[...rows].slice(0,40).map(([k,v])=>'- '+k+': '+v.slice(0,300)));
+ const bullets=[...d.querySelectorAll('#feature-bullets li .a-list-item,#feature-bullets li')].map(x=>clean(x.textContent)).filter((t,i,a)=>t&&a.indexOf(t)===i).slice(0,10);
+ if(bullets.length)lines.push('Особенности:',...bullets.map(b=>'- '+b.slice(0,400)));
+ const desc=clean(d.querySelector('#productDescription')?.textContent);if(desc)lines.push('Описание: '+desc.slice(0,1500));
+ return lines.join('\n').slice(0,8000);
+}
+async function amazonViaSearch(url){
+ const model=String(aiSettings.visionModel||'').trim()||'gpt-5-mini';
+ const input='Open this Amazon product page and extract facts about the product: '+url+'\nAnswer in Russian as plain text, one fact per line: Название; Бренд; Размеры товара (как на странице и в сантиметрах); Вес; Материал; Цвет; Основные функции и преимущества (до 8 пунктов, по одному на строку с «- »); Комплектация; Для кого и где используется. Use only information from this exact product listing. Write «нет данных» when unknown. Do not invent.';
+ let d;
+ for(const tool of ['web_search','web_search_preview']){
+  try{d=await aiFetch('openai','/responses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model,tools:[{type:tool}],input})});break;}
+  catch(e){if(tool==='web_search'&&/web_search|tool/i.test(e.message))continue;throw e;}
+ }
+ const text=(d?.output||[]).filter(o=>o.type==='message').flatMap(o=>o.content||[]).filter(c=>c.type==='output_text').map(c=>c.text).join('\n').trim();
+ if(!text)throw Error('Веб-поиск OpenAI не вернул данные о товаре.');
+ return text.replace(/\(\[([^\]]+)\]\([^)]+\)\)/g,'').slice(0,8000);
+}
+async function loadAmazon(j){
+ const url=amazonURL(j.aiAmazonUrl);let text='',via='';
+ if(aiProxy){try{const r=await fetch(aiProxy+'/api/page?url='+encodeURIComponent(url));if(r.ok){text=parseAmazonHTML(await r.text());via='со страницы через локальный AI-сервер';}}catch{}}
+ if(!text){if(!hasKey('openai'))throw Error('Amazon не отдаёт страницу браузеру напрямую. Запусти AI-сервер или укажи ключ OpenAI — тогда данные найдёт веб-поиск.');text=await amazonViaSearch(url);via='через веб-поиск OpenAI';}
+ j.aiAmazon=text;j.aiAmazonFrom=url;persist();return via;
+}
+function renderAmazon(){
+ const j=job();if(!j)return;if(document.activeElement!==$('amazonUrl'))$('amazonUrl').value=j.aiAmazonUrl||'';if(document.activeElement!==$('amazonText'))$('amazonText').value=j.aiAmazon||'';
+ $('amazonBox').hidden=!j.aiAmazon;const st=$('amazonStatus');st.classList.remove('error');
+ let url='';try{url=j.aiAmazonUrl?amazonURL(j.aiAmazonUrl):'';}catch{}
+ st.textContent=!j.aiAmazonUrl?'':j.aiAmazon&&j.aiAmazonFrom===url?'Данные загружены. Их можно поправить — они пойдут в анализ продукта.':'Данные загрузятся при «Начать» или по кнопке «Загрузить данные».';
+}
+async function ensureAmazon(j){
+ if(!String(j.aiAmazonUrl||'').trim()){pipeStep('amazon','done');return;}
+ let url;try{url=amazonURL(j.aiAmazonUrl);}catch(e){pipeStep('amazon','error');pipeMsg(e.message+' Продолжаю без Amazon.',true);return;}
+ if(j.aiAmazon&&j.aiAmazonFrom===url){pipeStep('amazon','done');return;}
+ pipeStep('amazon','run');pipeMsg('Загружаю данные продукта с Amazon…');
+ try{await loadAmazon(j);pipeStep('amazon','done');renderAmazon();}
+ catch(e){pipeStep('amazon','error');pipeMsg('Amazon: '+e.message+' Продолжаю без этих данных.',true);}
+}
+$('amazonUrl').addEventListener('input',()=>{job().aiAmazonUrl=$('amazonUrl').value.trim();markDirty();renderAmazon();});
+$('amazonText').addEventListener('input',()=>{job().aiAmazon=$('amazonText').value;markDirty();refreshAnalysisNote();});
+$('amazonLoad').addEventListener('click',async()=>{
+ const j=job(),st=$('amazonStatus'),b=$('amazonLoad');
+ try{amazonURL(j.aiAmazonUrl);}catch(e){st.textContent=e.message;st.classList.add('error');return;}
+ b.disabled=true;st.classList.remove('error');st.textContent='Загружаю данные с Amazon…';
+ try{const via=await loadAmazon(j);renderAmazon();$('amazonBox').open=true;st.textContent='Данные загружены '+via+'. Проверь и поправь при необходимости.';refreshAnalysisNote();}
+ catch(e){st.textContent=e.message;st.classList.add('error');}
+ finally{b.disabled=false;}
+});
+
+// --- video settings: audio select, summary, per-clip estimate ---
+function videoSummaryText(){return 'Видео: '+modelName(String(aiSettings.videoModel||'').trim())+' · '+aiSettings.resolution+' · '+(aiSettings.audio?'со звуком':'без звука')+' · '+(Math.round(Number(aiSettings.duration))||5)+' с';}
+function refreshVideoSettings(){
+ $('videoSummary').textContent=videoSummaryText();
+ const [w,h]=(VIDEO_DIMS[aiSettings.resolution]||VIDEO_DIMS['720p'])[aiSettings.format]||VIDEO_DIMS['720p']['16:9'],dur=Math.round(Number(aiSettings.duration))||5,tokens=Math.round(w*h*24*dur/1024),cost=tokens/1e6*modelPrice(String(aiSettings.videoModel||'').trim());
+ $('videoEstimate').textContent='Один ролик сейчас: '+modelName(String(aiSettings.videoModel||'').trim())+', '+aiSettings.resolution+' ('+w+' × '+h+'), '+dur+' с, '+(aiSettings.audio?'со звуком':'без звука')+' ≈ '+fmtTok(tokens)+' токенов ≈ '+fmtUSD(cost)+'. Оценка по формуле и цене из «Баланс и расходы».';
+}
+$('aiAudio').value=aiSettings.audio?'1':'0';
+$('aiAudio').addEventListener('change',()=>{aiSettings.audio=$('aiAudio').value==='1';saveAISettings();refreshVideoSettings();});
+for(const id of ['aiVideoModel','aiVideoModelCustom','aiResolution','aiDuration','aiFormat','aiPrice20','aiPriceFast','aiPriceMini','aiPriceOther'])$(id).addEventListener(id==='aiResolution'||id==='aiFormat'||id==='aiVideoModel'?'change':'input',()=>setTimeout(refreshVideoSettings));
+$('videoSummary').addEventListener('click',()=>showTab('settings'));
+refreshVideoSettings();
+
 $('aiResetSettings').addEventListener('click',()=>{
  if(!confirm('Сбросить модели, параметры, стиль, шаблоны и цены к значениям по умолчанию?'))return;
  const keepKeys=confirm('Оставить ключи API?\n\nOK — оставить ключи. Отмена — удалить и ключи тоже.');
