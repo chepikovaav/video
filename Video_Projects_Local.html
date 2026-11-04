@@ -69,7 +69,7 @@
 </style></head><body>
 <header class="sitehead"><span class="eyebrow">NASTYA / VIDEO PROJECTS · 06.0</span><span id="launchMode">Проверяю режим запуска…</span></header>
 <div class="layout"><aside class="sidebar"><h2>Постоянные проекты</h2><nav id="profileList" class="profile-list" aria-label="Проекты"></nav><button type="button" id="newProfile">＋ Новый проект</button><button type="button" id="saveWorkspace" class="small">Сохранить все проекты</button><button type="button" id="openTransfer" class="small">Перенос без скачивания</button><p class="side-note">Проект — постоянное оформление.<br>Ролик — отдельный товар и скрипт.<br><br>Сохраняй JSON-копию перед переходом на новую версию. Автосохранение привязано к этому браузеру и может не перенестись с другим HTML-файлом.</p></aside>
-<main><section id="launchWarning" class="notice warn" hidden role="status"><strong>Это встроенный предпросмотр, не локальный редактор.</strong><p>Здесь создание файла и его скачивание — разные действия. Скачивание может быть запрещено окружением. Не открывай blob-ссылку в новой вкладке и не отключай защиту браузера.</p><p>Скачай ZIP из сообщения, распакуй его в Finder и открой <strong>Video_Projects_Local.html</strong> через «Открыть с помощью → Google Chrome» или Safari. Если есть правки, перенеси их кнопкой «Перенос без скачивания» ниже; не закрывай эту страницу до переноса.</p></section><nav class="tabs" role="tablist" aria-label="Разделы"><button type="button" role="tab" data-tab-btn="gen" class="active">Генератор</button><button type="button" role="tab" data-tab-btn="settings">Настройки</button></nav><div id="tabGen"><div class="mainhead"><div><h1>Рекламный ролик<br>по шагам.</h1><p>Скрипт и фото продукта → анализ → картинки → видео → таймлайн DaVinci.</p></div><span class="badge">Редактируемый .drt / 25 fps</span></div><div id="keysNotice" class="notice warn" hidden><strong>Нужен ключ OpenAI.</strong> Укажи ключи API во вкладке «Настройки» — без них анализ и генерация не запустятся.<div class="button-row"><button type="button" class="small" id="keysGo">Открыть настройки</button></div></div>
+<main><section id="launchWarning" class="notice warn" hidden role="status"><strong>Это встроенный предпросмотр, не локальный редактор.</strong><p>Здесь создание файла и его скачивание — разные действия. Скачивание может быть запрещено окружением. Не открывай blob-ссылку в новой вкладке и не отключай защиту браузера.</p><p>Скачай ZIP из сообщения, распакуй его в Finder и открой <strong>Video_Projects_Local.html</strong> через «Открыть с помощью → Google Chrome» или Safari. Если есть правки, перенеси их кнопкой «Перенос без скачивания» ниже; не закрывай эту страницу до переноса.</p></section><nav class="tabs" role="tablist" aria-label="Разделы"><button type="button" role="tab" data-tab-btn="gen" class="active">Генератор</button><button type="button" role="tab" data-tab-btn="settings">Настройки</button></nav><div id="tabGen"><div class="mainhead"><div><h1>Рекламный ролик<br>по шагам.</h1><p>Скрипт и фото продукта → анализ → картинки → видео → таймлайн DaVinci.</p></div><span class="badge">Редактируемый .drt / 25 fps</span></div><div id="keysNotice" class="notice warn" hidden><strong>Нужен ключ OpenAI или Codex.</strong> Укажи ключ во вкладке «Настройки», положи его в .env рядом с ai_server.py или войди в Codex через ChatGPT — без этого анализ и генерация не запустятся.<div class="button-row"><button type="button" class="small" id="keysGo">Открыть настройки</button></div></div>
 <section class="panel" aria-label="Текущий проект"><div class="profilebar"><div><h2 id="projectHeading">NXA</h2><span class="badge" id="profileBadge"></span></div><button id="editProfile" type="button" class="small">Настройки проекта</button></div><p class="muted" id="profileSummary"></p><div id="profileWarning" class="notice warn" hidden></div>
 <div class="jobrow"><div><label for="jobSelect">Ролики этого проекта</label><select id="jobSelect"></select></div><button id="newJob" type="button">＋ Новый ролик</button><button id="duplicateJob" type="button">Копия ролика</button></div>
 <div class="settings"><div><label for="name">Название ролика и таймлайна</label><input id="name" maxlength="120" autocomplete="off" placeholder="Например, Emerson EVP-2502"><div class="filename">Файл: <strong id="fileName"></strong></div></div><div><label for="mode">Сборка</label><select id="mode"><option value="flexible">Новый таймлайн титров · автохронометраж</option><option value="original">Исходный NXA-монтаж · 7 сцен</option></select></div><div><label for="factor">Запас времени на чтение</label><select id="factor"><option value="1">Как в NXA-референсе</option><option value="1.15">На 15% больше</option><option value="1.3">На 30% больше</option></select></div></div><p class="mode-note" id="modeNote"></p>
@@ -92,15 +92,16 @@
 <details class="help"><summary>Сохранение, импорт и работа с проектами</summary><p><strong>Сохранить ролик .json</strong> — переносимый файл с текстами, выделениями, длительностями и настройками его проекта. <strong>Сохранить все проекты</strong> — резервная копия всей библиотеки, включая NXA, POE и новые проекты.</p><p><strong>Импорт JSON / DRT / TXT</strong> открывает черновики v2–v5, планы сцен и резервные копии v5. Импорт добавляет ролики, не перезаписывая существующие. TXT загружается отдельным роликом с сохранением звёздочек, без принудительного автоподбора.</p><p><strong>Импорт DRT в это приложение</strong> поддерживает только совместимые титры NXA с 25 fps, включая файлы, созданные редактором. Восстанавливаются тексты, диапазоны выделений, шрифт, цвета и длительности. Длительности становятся ручными; кнопка «Авто» возвращает расчёт. Цвета выделений при новом экспорте назначаются по порядку фраз: первое и второе; пустой первый диапазон исходника не сохраняется. Видео, музыка, другие эффекты, произвольные шаблоны, зазоры и наложения титров не восстанавливаются. Для полного переноса внутри редактора надёжнее JSON.</p><p><strong>Экспорт .drt</strong> подготавливает файл. В отдельном окне браузера выбери «Сохранить файл…» (если поддерживается браузером) или «Скачать .drt». Встроенный предпросмотр для скачивания не используется. Сообщение «Файл сохранён» выводится только после подтверждённой записи через диалог сохранения. Обычное скачивание не даёт странице такого подтверждения.</p><p><strong>Импорт DRT в DaVinci</strong> — отдельное действие в Resolve: <strong>File → Import → Timeline</strong>. Эта HTML-страница не открывает Resolve и не импортирует туда автоматически.</p><p>Настройки профиля применяются при новом экспорте его роликов. Ранее сохранённые .drt не меняются. Другой шрифт можно использовать на основе NXA; другой тип титра, тень или анимация требуют адаптера по образцу .drt. Профиль POE сейчас хранит пожелания, но не выдаёт приблизительный NXA-титр за готовый POE.</p><p>Автосохранение хранится в браузере, не в HTML-файле. Очистка данных, другой браузер или новое имя HTML могут его сбросить. Перед переходом на новую версию сохрани JSON и импортируй его в новую страницу.</p></details>
 <details class="help"><summary>Как работают выделения и длительности</summary><p>Кнопка «Подобрать выделения» читает актуальный текст. Результат появляется рядом с ней. Если те же слова уже выделены, об этом явно написано; повторное нажатие не генерирует случайный новый вариант. Если правила не нашли фразу, существующие выделения не удаляются.</p><p>Можно поставить <code>*звёздочки*</code> вручную или выделить слова мышкой в поле и нажать «Выделить выбранное». Старые <code>**двойные звёздочки**</code> также поддерживаются.</p><p>Подбор ориентирован на твои примеры: полное название товара во вступлении, затем польза и целые фразы; две характеристики выделяются, когда образуют смысловую пару. Это набор правил, не обученная модель. Он не понимает все товары и языки.</p><p><code>секунды = max(2,52; 0,309826 + 0,051692 × символы)</code>, затем выбранный запас и округление до кадра при 25 fps. Это оценка по семи NXA-титрам. Для POE пока используется тот же темп, не отдельная калибровка. От 1 до 100 сцен; до 600 символов в одном экспортируемом титре.</p><p>Название ролика становится названием .drt и таймлайна. Проект в библиотеке самого Resolve приложение не переименовывает. Размер шрифта не уменьшается автоматически, длинные строки нужно проверить в Resolve.</p><div class="button-row"><button type="button" id="planExport" class="small">Сохранить план сцен .json</button><button type="button" id="saveText" class="small">Сохранить скрипт .txt</button></div></details>
 <p class="legal">v6.0 · 1920 × 1080 · 25 fps · старт 01:00:00:00. Предпросмотр условный, шрифты не встроены. Новые параметры и импорт .drt требуют просмотра в Resolve. Сетевые запросы — только к OpenAI и Seedance по кнопкам «Начать» и генерации в сценах; ключи хранятся в этом браузере. Нет установки агента или доступа к экрану. Встроенная копия исходного шаблона содержит частные названия и пути: не публикуй этот HTML как обезличенный файл.</p>
-</div><div id="tabSettings" hidden><div class="mainhead"><div><h1>Настройки</h1><p>Ключи API, модели и параметры генерации. Хранятся только в этом браузере и не попадают в JSON, перенос и .drt.</p></div></div>
+</div><div id="tabSettings" hidden><div class="mainhead"><div><h1>Настройки</h1><p>Ключи API, модели и параметры генерации. Ключи из файла <code>.env</code> рядом с ai_server.py берутся автоматически, их поля скрываются; введённые здесь хранятся только в этом браузере и не попадают в JSON, перенос и .drt.</p></div></div>
 <section class="panel"><div class="ai-grid">
 <h3 class="wide">OpenAI · картинки и анализ фото</h3>
-<div class="wide"><label for="aiOpenaiKey">OpenAI API key</label><input id="aiOpenaiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"></div>
+<div class="wide"><label for="aiOpenaiVia">Как работать с ChatGPT / OpenAI</label><select id="aiOpenaiVia"><option value="auto">Авто — API-ключ, если он есть, иначе Codex</option><option value="api">API-ключ OpenAI — оплата по токенам</option><option value="codex">Codex — подписка ChatGPT, без ключа</option></select><p class="muted" id="aiOpenaiInfo"></p></div>
+<div class="wide" id="aiOpenaiKeyRow"><label for="aiOpenaiKey">OpenAI API key</label><input id="aiOpenaiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"></div>
 <div><label for="aiImageModel">Модель для изображений</label><select id="aiImageModel"><option value="gpt-image-2">GPT Image 2 — новейшая, лучшее качество</option><option value="gpt-image-1.5">GPT Image 1.5</option><option value="gpt-image-1">GPT Image 1</option><option value="gpt-image-1-mini">GPT Image 1 mini — дешевле</option><option value="__custom">Свой ID…</option></select><input id="aiImageModelCustom" class="ai-custom" autocomplete="off" spellcheck="false" placeholder="ID модели OpenAI" hidden></div>
 <div><label for="aiVisionModel">Модель для анализа фото (vision)</label><select id="aiVisionModel"><option value="gpt-5-mini">GPT-5 mini — быстро и недорого</option><option value="gpt-5">GPT-5 — точнее</option><option value="gpt-4.1">GPT-4.1</option><option value="gpt-4.1-mini">GPT-4.1 mini</option><option value="gpt-4o">GPT-4o</option><option value="__custom">Свой ID…</option></select><input id="aiVisionModelCustom" class="ai-custom" autocomplete="off" spellcheck="false" placeholder="ID модели OpenAI" hidden></div>
 <div><label for="aiImageQuality">Качество картинок</label><select id="aiImageQuality"><option value="high">Высокое — финальные кадры</option><option value="medium">Среднее</option><option value="low">Низкое — дёшево, черновик</option><option value="auto">Авто</option></select></div>
 <h3 class="wide">Seedance · видео из картинки</h3>
-<div class="wide"><label for="aiArkKey">ModelArk API key</label><input id="aiArkKey" type="password" autocomplete="off" spellcheck="false"></div>
+<div class="wide" id="aiArkKeyRow"><label for="aiArkKey">ModelArk API key</label><input id="aiArkKey" type="password" autocomplete="off" spellcheck="false"></div><div class="wide" id="aiArkInfo" hidden><p class="muted">Ключ ModelArk взят из .env рядом с ai_server.py.</p></div>
 <div><label for="aiArkBase">Платформа</label><select id="aiArkBase"><option value="https://ark.ap-southeast.bytepluses.com/api/v3">BytePlus ModelArk (международная)</option><option value="https://ark.cn-beijing.volces.com/api/v3">Volcengine Ark (Китай)</option></select></div>
 <div class="wide"><label for="aiVideoModel">Модель Seedance</label><select id="aiVideoModel"><optgroup label="BytePlus ModelArk"><option value="dreamina-seedance-2-0-260128">Seedance 2.0 · dreamina-seedance-2-0-260128</option><option value="seedance-1-5-pro-251215">Seedance 1.5 Pro · seedance-1-5-pro-251215</option><option value="seedance-1-0-pro-250528">Seedance 1.0 Pro · seedance-1-0-pro-250528</option><option value="seedance-1-0-pro-fast-251015">Seedance 1.0 Pro Fast — быстрее, дешевле · seedance-1-0-pro-fast-251015</option><option value="seedance-1-0-lite-i2v-250428">Seedance 1.0 Lite I2V · seedance-1-0-lite-i2v-250428</option></optgroup><optgroup label="Volcengine Ark"><option value="doubao-seedance-2-0-260128">Seedance 2.0 · doubao-seedance-2-0-260128</option><option value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro · doubao-seedance-1-5-pro-251215</option><option value="doubao-seedance-1-0-pro-250528">Seedance 1.0 Pro · doubao-seedance-1-0-pro-250528</option><option value="doubao-seedance-1-0-pro-fast-251015">Seedance 1.0 Pro Fast — быстрее, дешевле · doubao-seedance-1-0-pro-fast-251015</option><option value="doubao-seedance-1-0-lite-i2v-250428">Seedance 1.0 Lite I2V · doubao-seedance-1-0-lite-i2v-250428</option></optgroup><option value="__custom">Свой Model ID…</option></select><input id="aiVideoModelCustom" class="ai-custom" autocomplete="off" spellcheck="false" placeholder="Model ID из консоли ModelArk" hidden></div>
 <h3 class="wide">Параметры генерации</h3>
@@ -116,7 +117,7 @@
 <label for="tplVidPeople" style="margin-top:12px">Видео — в кадре есть люди</label><textarea id="tplVidPeople" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplVidPeopleReset">По умолчанию</button></div>
 <label for="tplVidProduct" style="margin-top:12px">Видео — только продукт</label><textarea id="tplVidProduct" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplVidProductReset">По умолчанию</button></div></details></div>
 <h3 class="wide">Соединение</h3>
-<div class="wide"><p><span class="badge" id="aiConn">Проверяю соединение…</span></p><p class="muted">OpenAI обычно отвечает браузеру напрямую. Если появляется «Нет соединения» (чаще у Seedance), запусти рядом с этим HTML <strong>«Запустить AI-сервер.command»</strong> или <code>python3 ai_server.py</code> и нажми «Проверить соединение». Страницу можно оставить открытой как файл.</p><div class="button-row"><button type="button" class="small" id="aiCheck">Проверить соединение</button><button type="button" class="small" id="aiClean">Очистить неиспользуемые файлы</button></div></div>
+<div class="wide"><p><span class="badge" id="aiConn">Проверяю соединение…</span></p><p class="muted">OpenAI обычно отвечает браузеру напрямую. Если появляется «Нет соединения» (чаще у Seedance), запусти рядом с этим HTML <strong>«Запустить AI-сервер.command»</strong> или <code>python3 ai_server.py</code> и нажми «Проверить соединение». Страницу можно оставить открытой как файл. Ключи можно положить в файл <code>.env</code> рядом с ai_server.py (образец — .env.example), тогда их поля скрываются. Режим Codex работает только через AI-сервер.</p><div class="button-row"><button type="button" class="small" id="aiCheck">Проверить соединение</button><button type="button" class="small" id="aiClean">Очистить неиспользуемые файлы</button></div></div>
 </div></section></div>
 </main></div>
 <aside id="resolveHelp" class="panel helpbox" role="region" aria-labelledby="filePanelTitle" hidden>
@@ -1045,7 +1046,7 @@ const TPL_IMAGE='Commercial advertising photo for a product ad. Product: {produc
 const TPL_VID_PEOPLE='Animate this image. The person calmly and naturally uses the product at a normal, realistic pace. No sudden or fast movements. Slow, smooth camera movement throughout (gentle dolly or slight pan). The product and its logo stay perfectly stable and undistorted — the logo must not warp, melt or float. Keep the product\'s appearance identical to the first frame.';
 const TPL_VID_PRODUCT='Slow, smooth cinematic camera move around the product: a gentle orbit around it OR a slow push-in. The camera is always moving, but never fast or jerky. The product stays still and sharp; its logo and text remain perfectly stable and undistorted, no warping or floating. Keep lighting and environment consistent with the first frame.';
 const FORMAT_SIZE={'9:16':'1024x1536','16:9':'1536x1024','1:1':'1024x1024'};
-const AI_DEFAULTS={openaiKey:'',imageModel:'gpt-image-2',visionModel:'gpt-5-mini',imageQuality:'high',format:'9:16',
+const AI_DEFAULTS={openaiVia:'auto',openaiKey:'',imageModel:'gpt-image-2',visionModel:'gpt-5-mini',imageQuality:'high',format:'9:16',
  arkKey:'',arkBase:'https://ark.ap-southeast.bytepluses.com/api/v3',videoModel:'seedance-1-5-pro-251215',resolution:'1080p',duration:5,audio:false,watermark:false,legacyFlags:false,
  style:'',tplImage:'',tplVidPeople:'',tplVidProduct:''};
 const ANALYSIS_FIELDS=[['name','Продукт'],['category','Тип продукта'],['purpose','Для чего используется','wide'],['users','Кто использует'],['places','Где обычно применяют'],['colors','Цвета'],['materials','Материалы'],['shape','Форма'],['logo_present','Логотип есть?'],['logo_location','Где логотип'],['logo_text','Текст логотипа'],['details','Важные детали внешнего вида','wide'],['environment','Окружение для кадров','wide']];
@@ -1059,7 +1060,7 @@ const PLAN_SYSTEM='You plan shots for a product advertising video. For each scen
  'Return only JSON: {"scenes":[{"n":1,"people":true,"shot":"..."}]} with one entry per scene.';
 const PEOPLE_SYSTEM='Return only JSON {"people": true|false}. true if any person or human body part (including hands) is visible in the image, otherwise false.';
 let aiSettings=(()=>{let o={};try{o=JSON.parse(localStorage.getItem(AI_KEY)||'{}')||{};}catch{}const s={...AI_DEFAULTS,...o};if(!o.format&&FORMAT_SIZE[o.ratio])s.format=o.ratio;if(!FORMAT_SIZE[s.format])s.format='9:16';return s;})();
-let aiProxy='',aiUploadTarget='',aiStop=false,aiRunning=false;
+let aiProxy='',aiServer={},aiUploadTarget='',aiStop=false,aiRunning=false;
 const imgBusy=new Set(),vidBusy=new Set(),aiMsg=new Map(),aiPolling=new Set(),aiGaveUp=new Set(),aiMedia=new Map();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const STATE_LABEL={wait:'Ожидание',run:'Генерация',done:'Готово',error:'Ошибка'};
@@ -1110,18 +1111,40 @@ async function prepareUpload(file){
 function arkBase(){const v=String(aiSettings.arkBase||'').trim().replace(/\/+$/,'');if(!/^https:\/\/[\w.-]+(?::\d+)?(\/[\w./-]*)?$/.test(v))throw Error('Адрес платформы Seedance должен начинаться с https://');return v;}
 async function checkProxy(){
  const candidates=[...new Set([/^https?:$/.test(location.protocol)?location.origin:'',AI_SERVER].filter(Boolean))];
- aiProxy='';
- for(const base of candidates){try{const c=new AbortController(),t=setTimeout(()=>c.abort(),1500);const r=await fetch(base+'/api/health',{signal:c.signal});clearTimeout(t);if(r.ok&&(await r.json()).ok){aiProxy=base;break;}}catch{}}
- $('aiConn').textContent=aiProxy?'AI-сервер запущен ('+aiProxy.replace(/^https?:\/\//,'')+') — запросы идут через него':'AI-сервер не найден — запросы идут напрямую из браузера';
+ aiProxy='';aiServer={};
+ for(const base of candidates){try{const c=new AbortController(),t=setTimeout(()=>c.abort(),1500);const r=await fetch(base+'/api/health',{signal:c.signal});clearTimeout(t);if(r.ok){const d=await r.json();if(d?.ok){aiProxy=base;aiServer=d;break;}}}catch{}}
+ $('aiConn').textContent=aiProxy?'AI-сервер запущен ('+aiProxy.replace(/^https?:\/\//,'')+') — запросы идут через него'+(aiServer.codex?.loggedIn?' · Codex: '+aiServer.codex.message:''):'AI-сервер не найден — запросы идут напрямую из браузера';
  $('aiConn').classList.toggle('pending',!aiProxy);
  return aiProxy;
 }
-function hasKey(service){return !!String(service==='openai'?aiSettings.openaiKey:aiSettings.arkKey).trim()||!!aiProxy;}
+// Keys: the AI server's .env wins over a key typed here. ChatGPT can also run through
+// the Codex CLI on the AI server (ChatGPT subscription, no API key) as polled jobs.
+function serverHas(service){return !!aiProxy&&!!aiServer[service==='openai'?'openaiKey':'arkKey'];}
+function codexReady(){return !!aiProxy&&!!aiServer.codex?.loggedIn;}
+function openaiVia(){const v=aiSettings.openaiVia;if(v==='api'||v==='codex')return v;return String(aiSettings.openaiKey||'').trim()||serverHas('openai')||!codexReady()?'api':'codex';}
+function hasKey(service){if(service==='openai'&&openaiVia()==='codex')return codexReady();return serverHas(service)||!!String(service==='openai'?aiSettings.openaiKey:aiSettings.arkKey).trim()||!!aiProxy;}
+function noKeyMsg(service){
+ if(service==='ark')return 'Нет ключа Seedance (ModelArk). Укажи его во вкладке «Настройки» или в .env рядом с ai_server.py.';
+ if(openaiVia()==='codex')return aiProxy?'Codex недоступен: '+(aiServer.codex?.message||'нет данных')+'.':'Режим Codex работает только через AI-сервер: запусти «Запустить AI-сервер.command» и нажми «Проверить соединение».';
+ return 'Нет ключа OpenAI. Укажи его во вкладке «Настройки» или в .env рядом с ai_server.py.';
+}
+async function codexJob(id){
+ for(let fails=0;;){
+  await sleep(2500);let d;
+  try{const r=await fetch(aiProxy+'/api/codex/jobs/'+encodeURIComponent(id));d=await r.json();
+   if(r.status===404)throw Object.assign(Error(d?.error?.message||'Задача Codex не найдена.'),{fatal:true});if(!r.ok)throw Error(d?.error?.message||'HTTP '+r.status);fails=0;}
+  catch(e){if(e.fatal||++fails>=8)throw Error('Codex: '+(e.fatal?e.message:'нет связи с AI-сервером ('+(e.message||e)+').'));continue;}
+  if(d.status==='done')return d.result;
+  if(d.status==='error')throw Error('Codex: '+d.error);
+ }
+}
 async function aiFetch(service,path,opts={}){
- const label=service==='openai'?'OpenAI':'Seedance',key=String(service==='openai'?aiSettings.openaiKey:aiSettings.arkKey).trim();
+ const codex=service==='openai'&&openaiVia()==='codex',label=codex?'Codex':service==='openai'?'OpenAI':'Seedance',key=String(service==='openai'?aiSettings.openaiKey:aiSettings.arkKey).trim();
  const headers=new Headers(opts.headers||{});
- if(key)headers.set('Authorization','Bearer '+key);
- else if(!aiProxy)throw Error(service==='openai'?'Нет ключа OpenAI. Укажи его во вкладке «Настройки».':'Нет ключа Seedance (ModelArk). Укажи его во вкладке «Настройки».');
+ if(codex){if(!codexReady())throw Error(noKeyMsg('openai'));headers.set('X-OpenAI-Via','codex');}
+ else if(serverHas(service)){/* the AI server adds its own key */}
+ else if(key)headers.set('Authorization','Bearer '+key);
+ else if(!aiProxy)throw Error(noKeyMsg(service));
  let url;
  if(aiProxy){url=aiProxy+'/api/'+service+path;if(service==='ark')headers.set('X-Ark-Base',arkBase());}
  else url=(service==='openai'?'https://api.openai.com/v1':arkBase())+path;
@@ -1133,6 +1156,7 @@ async function aiFetch(service,path,opts={}){
   const hint=r.status===401?' Проверь ключ в настройках.':r.status===429?' Превышен лимит запросов или закончился баланс.':/ModelNotOpen|model.*(not|does not) exist|model_not_found/i.test(m)?' Выбери другую модель в настройках или активируй её в консоли.':/safety|moderation/i.test(m)?' Запрос отклонён фильтром безопасности — измени текст или промпт сцены.':'';
   throw Error(label+' ('+r.status+'): '+m+hint);
  }
+ if(codex&&r.status===202&&data?.job)return await codexJob(data.job);
  return data;
 }
 async function fetchMedia(url){
@@ -1223,19 +1247,19 @@ async function generateImage(uid){
   data=await aiFetch('openai','/images/edits',{method:'POST',body:fd});
  }else data=await aiFetch('openai','/images/generations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...common,prompt})});
  const item=data?.data?.[0];let blob;
- if(item?.b64_json)blob=new Blob([b64(item.b64_json)],{type:'image/jpeg'});
+ if(item?.b64_json)blob=new Blob([b64(item.b64_json)],{type:/^iVBOR/.test(item.b64_json)?'image/png':/^UklGR/.test(item.b64_json)?'image/webp':'image/jpeg'});
  else if(item?.url)blob=await fetchMedia(item.url);
  else throw Error('OpenAI не вернул изображение.');
  return storeMedia('img',blob);
 }
 async function runImage(uid){
  if(imgBusy.has(uid))return false;imgBusy.add(uid);const t0=Date.now();
- setMsg(uid,'img','run','OpenAI рисует картинку… обычно 30–90 с.');
+ setMsg(uid,'img','run',openaiVia()==='codex'?'Codex рисует картинку… обычно 1–5 мин.':'OpenAI рисует картинку… обычно 30–90 с.');
  try{
   const key=await generateImage(uid);
   patchAI(uid,{image:key,video:'',videoUrl:'',task:'',people:null});aiMsg.delete(uid+':vid');
   setMsg(uid,'img','done','Готово за '+elapsed(t0)+'. Если картинка подходит — «Сгенерировать видео».');
-  detectPeople(uid,key);return true;
+  if(openaiVia()!=='codex')detectPeople(uid,key);return true;
  }catch(e){setMsg(uid,'img','error',e.message);return false;}
  finally{imgBusy.delete(uid);refreshAI(uid);}
 }
@@ -1318,7 +1342,7 @@ async function startPipeline(){
  const j=job();stash();
  let result;try{result=prepareScript($('bulk').value,$('separator').value,{highlights:$('autoHighlight').checked,wrap:$('autoWrap').checked});}catch(e){throw Error('Скрипт: '+e.message);}
  if(!j.aiPhotos.length)throw Error('Добавь хотя бы одно фото продукта.');
- if(!hasKey('openai'))throw Error('Нет ключа OpenAI. Укажи его во вкладке «Настройки».');
+ if(!hasKey('openai'))throw Error(noKeyMsg('openai'));
  if(scenes.some(s=>s.ai?.image||s.ai?.video||s.ai?.videoUrl)&&!confirm('Начать заново? Сцены пересоберутся из скрипта, текущие картинки и видео будут заменены.'))return;
  setRunning(true);aiStop=false;resetPipeline();
  try{
@@ -1335,7 +1359,7 @@ async function fillMissing(){
  if(aiRunning)return;const j=job();stash();
  const targets=scenes.filter(s=>!s.ai?.image&&scenePlain(s));
  if(!targets.length){setStatus('У всех сцен уже есть картинки.');return;}
- if(!hasKey('openai'))throw Error('Нет ключа OpenAI. Укажи его во вкладке «Настройки».');
+ if(!hasKey('openai'))throw Error(noKeyMsg('openai'));
  setRunning(true);aiStop=false;resetPipeline();pipeStep('split','done');
  try{if(j.aiPhotos.length)await ensureAnalysis(j);else pipeStep('analyze','done');if(aiStop)throw STOPPED;await generateImages(targets,j);}
  catch(e){pipeMsg(e.message,e!==STOPPED);setStatus(e.message,e!==STOPPED);}
@@ -1481,7 +1505,7 @@ $('cards').addEventListener('click',e=>{
  const b=e.target.closest('button[data-ai-action]');if(!b||b.disabled)return;const card=b.closest('[data-card]'),s=card&&scenes.find(x=>x.id===card.dataset.card);if(!s)return;
  const uid=aiOf(s).uid,act=b.dataset.aiAction;markDirty();
  if(act==='image'){if((s.ai.video||s.ai.videoUrl||s.ai.task)&&!confirm('Перегенерировать картинку? Видео этой сцены будет сброшено.'))return;runImage(uid);}
- else if(act==='video'){if(s.ai.task){aiGaveUp.delete(s.ai.task);pollVideo(uid,s.ai.task);}else{if(!hasKey('ark')){setMsg(uid,'vid','error','Нет ключа Seedance (ModelArk). Укажи его во вкладке «Настройки».');return;}runVideo(uid);}}
+ else if(act==='video'){if(s.ai.task){aiGaveUp.delete(s.ai.task);pollVideo(uid,s.ai.task);}else{if(!hasKey('ark')){setMsg(uid,'vid','error',noKeyMsg('ark'));return;}runVideo(uid);}}
  else if(act==='upload'){aiUploadTarget=uid;$('aiFrameFile').click();}
  else if(act==='resetPrompts'){s.ai={...s.ai,imgPrompt:'',vidPrompt:''};fillPrompts(s,card);setStatus('Промпты сцены снова собираются автоматически.');}
 });
@@ -1509,11 +1533,17 @@ function showTab(t){
 }
 document.querySelectorAll('[data-tab-btn]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tabBtn)));
 $('keysGo').addEventListener('click',()=>showTab('settings'));
-function refreshKeysNotice(){$('keysNotice').hidden=!!String(aiSettings.openaiKey).trim()||!!aiProxy;}
-const aiFields={aiOpenaiKey:'openaiKey',aiImageQuality:'imageQuality',aiFormat:'format',aiArkKey:'arkKey',aiArkBase:'arkBase',aiResolution:'resolution',aiDuration:'duration',aiAudio:'audio',aiWatermark:'watermark',aiLegacy:'legacyFlags',aiStyle:'style'};
+function refreshKeyFields(){
+ const via=openaiVia(),srvO=serverHas('openai'),srvA=serverHas('ark'),c=aiServer.codex;
+ $('aiOpenaiKeyRow').hidden=srvO||via==='codex';$('aiArkKeyRow').hidden=srvA;$('aiArkInfo').hidden=!srvA;
+ $('aiOpenaiInfo').textContent=via==='codex'?'Сейчас: Codex по подписке ChatGPT. '+(aiProxy?'Codex: '+(c?.message||'нет данных')+'.':'Нужен запущенный AI-сервер.')+' Модели выбирает Codex, картинка — 1–5 мин и расходует лимит подписки.'
+  :srvO?'Сейчас: API-ключ OpenAI из .env рядом с ai_server.py.'+(c?.loggedIn?' Codex тоже доступен.':''):'Сейчас: API-ключ OpenAI из поля ниже.'+(c?.loggedIn?' Codex тоже доступен.':'');
+}
+function refreshKeysNotice(){refreshKeyFields();$('keysNotice').hidden=hasKey('openai');}
+const aiFields={aiOpenaiVia:'openaiVia',aiOpenaiKey:'openaiKey',aiImageQuality:'imageQuality',aiFormat:'format',aiArkKey:'arkKey',aiArkBase:'arkBase',aiResolution:'resolution',aiDuration:'duration',aiAudio:'audio',aiWatermark:'watermark',aiLegacy:'legacyFlags',aiStyle:'style'};
 for(const [id,k] of Object.entries(aiFields)){const el=$(id);
  if(el.type==='checkbox')el.checked=!!aiSettings[k];else el.value=aiSettings[k];
- el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',()=>{aiSettings[k]=el.type==='checkbox'?el.checked:el.type==='number'?Number(el.value):el.value;saveAISettings();if(k==='format')applyFormat();if(k==='openaiKey')refreshKeysNotice();});
+ el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',()=>{aiSettings[k]=el.type==='checkbox'?el.checked:el.type==='number'?Number(el.value):el.value;saveAISettings();if(k==='format')applyFormat();if(k==='openaiKey'||k==='openaiVia')refreshKeysNotice();});
 }
 if(![...$('aiArkBase').options].some(o=>o.value===aiSettings.arkBase)){const o=document.createElement('option');o.value=o.textContent=aiSettings.arkBase;$('aiArkBase').append(o);$('aiArkBase').value=aiSettings.arkBase;}
 function bindModel(selId,customId,key){
