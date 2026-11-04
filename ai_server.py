@@ -342,6 +342,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.cors()
         self.send_header("Content-Type", ctype)
+        if ctype.startswith("text/html"):
+            self.send_header("Cache-Control", "no-store")  # always the newest page from this folder
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
