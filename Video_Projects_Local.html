@@ -69,6 +69,7 @@
 .regen-box{display:grid;gap:6px;background:#f7f9f4;border:1px solid #e6ebe0;border-radius:8px;padding:8px}.regen-box textarea{min-height:52px;font-size:12.5px}.regen-box.on{border-color:#c9a25b;background:#fffbf1}
 .pause-check{margin-top:12px!important;font-size:13px}
 .pif{font-size:12.5px;padding:2px 2px 0}
+.faces-check{align-items:flex-start!important;line-height:1.45}.faces-check input{margin-top:2px;flex:none}
 .media.empty.plan{place-items:start;text-align:left;align-content:start;font-size:11.5px;line-height:1.45;overflow:auto}.media.empty.plan b{display:block;color:var(--ink);margin-bottom:4px}
 .video-estimate{font-size:12.5px;background:#f1f5ea;border-radius:7px;padding:8px 11px;margin:0 0 8px}
 .amazon-row{display:flex;gap:8px;align-items:stretch}.amazon-row input{flex:1;min-width:0}
@@ -122,6 +123,7 @@
 <div><label for="aiResolution">Разрешение</label><select id="aiResolution"><option value="480p">480p — черновик, дешевле всего</option><option value="720p">720p</option><option value="1080p">1080p — финал, дороже всего</option></select></div>
 <div><label for="aiAudio">Звук</label><select id="aiAudio"><option value="0">Без звука</option><option value="1">Со звуком — звук генерирует модель</option></select></div>
 <div><label for="aiDuration">Длительность, с</label><input id="aiDuration" type="number" min="2" max="15" step="1"></div>
+<div class="wide"><label class="ai-check faces-check"><input type="checkbox" id="aiNoFaces">Без чётких лиц людей на картинках — нужно для Seedance 2.0 и 2.5: они не принимают картинки с реалистичными лицами («may contain real person»). Люди будут со спины, вполоборота, издалека, в расфокусе или в тени.</label></div>
 <div class="wide"><p class="video-estimate" id="videoEstimate"></p><label class="ai-check"><input type="checkbox" id="aiWatermark">Водяной знак Seedance</label><label class="ai-check"><input type="checkbox" id="aiLegacy">Параметры текстом в промпте (для старых моделей Seedance 1.0)</label></div>
 <h3 class="wide">Формат кадра</h3>
 <div><label for="aiFormat">Формат картинок и видео</label><select id="aiFormat"><option value="9:16">9:16 — вертикальный</option><option value="16:9">16:9 — горизонтальный</option><option value="1:1">1:1 — квадрат</option></select></div>
@@ -1079,7 +1081,7 @@ const TPL_VID_PRODUCT='Slow, smooth cinematic camera move: a gentle orbit around
 const FORMAT_SIZE={'9:16':'1024x1536','16:9':'1536x1024','1:1':'1024x1024'};
 const AI_DEFAULTS={openaiKey:'',imageModel:'gpt-image-2',visionModel:'gpt-5-mini',imageQuality:'high',format:'9:16',
  arkKey:'',arkBase:'https://ark.ap-southeast.bytepluses.com/api/v3',videoModel:'dreamina-seedance-2-0-260128',resolution:'720p',duration:5,audio:false,watermark:false,legacyFlags:false,
- style:'',tplImage:'',tplBlockIn:'',tplBlockOut:'',tplVidPeople:'',tplVidProduct:'',
+ noFaces:true,style:'',tplImage:'',tplBlockIn:'',tplBlockOut:'',tplVidPeople:'',tplVidProduct:'',
  prices:{'dreamina-seedance-2-0-260128':7,'dreamina-seedance-2-0-fast-260128':4.2,'dreamina-seedance-2-0-mini-260615':1.4,other:7},v:3};
 const SEEDANCE_MODELS={'dreamina-seedance-2-0-260128':'Seedance 2.0','dreamina-seedance-2-0-fast-260128':'Seedance 2.0 Fast','dreamina-seedance-2-0-mini-260615':'Seedance 2.0 Mini'};
 const LEDGER_KEY='nastya-ai-ledger-v1';
@@ -1097,6 +1099,10 @@ const ANALYZE_SYSTEM='Ты анализируешь фото продукта д
  '"env_list" (только если есть референсы окружения: по одной строке на каждый референс по порядку, формат «1: короткое описание обстановки»; иначе пустая строка). '+
  'Если даны данные со страницы Amazon, размер бери из них и укажи «по данным Amazon». Значения — короткие точные фразы на русском, кроме текста логотипа. Не выдумывай то, чего не видно; размер без данных Amazon давай как оценку.';
 const PLAN_SYSTEM='You are the storyboard artist for a product advertising video. Plan the listed scenes_to_plan in ONE pass so that, together with other_scenes, the whole ad has no repeats. The goal of every scene is to give the viewer a FEELING (emotion, atmosphere, memory, desire). For each scene return a plan for ONE continuous photograph. Rules:\nA. DO NOT INVENT. When the product is in frame use only known_features. Never rely on unknown_features: no slots, ports, buttons, lids, compartments or mechanisms that are not known. Never show the product opened, disassembled, from inside, or with a close-up of a side that is not known (back, bottom, interior). Choose an angle that shows the sides visible in the reference photos.\nB. If a scene talks about a function whose physical mechanism is unknown (insert a disc, plug in headphones, charging…), choose one of: the result or emotion (people listen, dance, relax next to the product); a scene WITHOUT the product that conveys the same feeling (rule K); an indirect sign (a cable runs behind the product, the port is hidden); the related object next to the product without touching the unknown part — at most ONCE per ad; the product in its environment or in hands without that function.\nC. SINGLE FRAME: no split screen, collage, grid, diptych/triptych, before/after, picture-in-picture, insets or dividing lines. For a comparison or several moments pick the single most expressive moment. Never split a scene.\nD. VARIETY across the whole ad: every scene has its own situation and action. Alternate framing (wide / medium / close-up / detail) — two neighbouring scenes never share the same framing. Alternate who/what is in frame (one person, a group, only hands, the product alone in its environment, only related objects). Alternate scenes with and without the product. Vary locations, time of day and lighting within usage_scenarios. A close-up of hands with the product at most once per ad.\nE. ENVIRONMENT: when the product is in frame it is always in a real, lived-in setting (room, street, picnic, garage, party, beach…), from environment references if listed, otherwise from usage_scenarios. Never a white, plain or studio background, never a packshot.\nF. Scale must match the real size and how the product is held or placed.\nK. THE PRODUCT IS NOT REQUIRED IN EVERY SCENE. If the scene text is about something connected to the product but not the product itself (an accessory, content, an activity, a place, an era, a result), show it WITHOUT the product, using associated_world: a person busy with a related activity, hands with related objects, a detail of the setting (e.g. for a boombox and a line about cassettes: a person sorting a box of cassettes, no boombox). If the text is about the product itself, its look or its key benefit, the product is in frame. Scenes without the product keep the same atmosphere, era and style as the whole ad. Balance: the product is in at least half of all scenes and always in the LAST scene; never more than two scenes in a row without the product.\nG. For scenes with user_feedback: update current_plan following the feedback exactly, keep the rest. For scenes with task "new variant": invent a plan clearly different from current_plan and from all other scenes. For scenes with fixed product_in_frame, keep that value.\nH. Before answering, check the storyboard as a whole (including other_scenes); if two scenes are similar in situation, framing or who is in frame, or the balance rule K is broken, change one of the scenes you are planning.\nReturn only JSON: {"scenes":[{"n":1,"feeling":"...","product_in_frame":true,"location":"...","who":"...","action":"...","framing":"wide|medium|close-up|detail","angle":"...","time_light":"...","people":true,"uses_unknown":false,"env":[1]}]} — one entry per scene in scenes_to_plan, short English phrases; "people" = a person or hands are visible; "env" = numbers of the 1–2 best-fitting environment references (empty array if none are listed or none fit).';
+const FACES_RULE='FACES: no clearly visible, recognizable human faces. Show people from behind, turned away in profile, at a distance, out of focus, with the face in shadow, cropped out of the frame or covered by hair, a hat, hands or an object. Hands, bodies and silhouettes are fine.';
+const FACES_PLAN_RULE='L. NO CLEAR FACES: people may appear, but never with a clearly visible, recognizable face — plan them from behind, turned away, far away, out of focus, in shadow, cropped at the face or with the face covered; hands-only and silhouette shots are fine.';
+const INTEGRITY_PLAN_RULE='M. PRODUCT INTEGRITY: never plan anything that changes, redesigns, bends, covers or distorts the product; when it is in frame its inscriptions and especially its logo stay visible and exactly as in the reference photos.';
+function integrityLine(a){return 'PRODUCT INTEGRITY: never change, redesign, recolor, distort, bend, melt or simplify the product. Reproduce every inscription, label and marking, and especially the logo, exactly as in the reference images — same text and spelling, font, size, color and position; sharp, legible, not warped, mirrored, blurred, cropped or invented.'+(String(a?.logo_text||'').trim()?' The logo reads "'+String(a.logo_text).trim()+'" — write it exactly like this.':'');}
 const PEOPLE_SYSTEM='Return only JSON {"people": true|false}. true if any person or human body part (including hands) is visible in the image, otherwise false.';
 let aiSettings=(()=>{let o={};try{o=JSON.parse(localStorage.getItem(AI_KEY)||'{}')||{};}catch{}const s={...AI_DEFAULTS,...o};if(!o.format&&FORMAT_SIZE[o.ratio])s.format=o.ratio;if(!FORMAT_SIZE[s.format])s.format='9:16';s.prices={...AI_DEFAULTS.prices,...(o.prices&&typeof o.prices==='object'?o.prices:{})};
  if(!(o.v>=2)){s.resolution='720p';if(!SEEDANCE_MODELS[s.videoModel])s.videoModel=AI_DEFAULTS.videoModel;}
@@ -1238,6 +1244,8 @@ function autoImagePrompt(s,j=job()){
  if(n)extra.push('Reference images '+(n>1?r(1)+'–'+r(n):r(1))+' show the real product.'+(envN?' Reference image'+(envN>1?'s '+r(n+1)+'–'+r(n+envN)+' show real-life environments':' '+r(n+1)+' shows a real-life environment')+' to match.':''));
  else if(envN)extra.push('Reference image'+(envN>1?'s '+r(1)+'–'+r(envN)+' show real-life environments':' '+r(1)+' shows a real-life environment')+' to match (setting only — no product).');
  extra.push('Aspect ratio '+aiSettings.format+({'9:16':', vertical','16:9':', horizontal','1:1':', square'}[aiSettings.format]||'')+'.');
+ if(aiSettings.noFaces){if(/^PEOPLE:.*$/m.test(p))p=p.replace(/^(PEOPLE:.*)$/m,'$1\n'+FACES_RULE);else extra.unshift(FACES_RULE);}
+ if(inFrame&&!/PRODUCT INTEGRITY/.test(p))extra.unshift(integrityLine(a));
  return p+'\n\n'+extra.join('\n');
 }
 function sceneEnvKeys(s,j){
@@ -1250,8 +1258,12 @@ function sceneEnvKeys(s,j){
 function imagePrompt(s,j){return (s.ai?.imgPrompt||'').trim()||autoImagePrompt(s,j);}
 function scenePeople(s){return s.ai?.people??s.ai?.planPeople??false;}
 function autoVideoPrompt(s){
- const t=scenePeople(s)?(String(aiSettings.tplVidPeople||'').trim()||TPL_VID_PEOPLE):(String(aiSettings.tplVidProduct||'').trim()||TPL_VID_PRODUCT);
- return (s.ai?.productInFrame!==false?t.replace(/\[\[([\s\S]*?)\]\]/g,'$1'):t.replace(/\s*\[\[[\s\S]*?\]\]/g,'')).replace(/[ \t]{2,}/g,' ').trim();
+ const people=scenePeople(s),inFrame=s.ai?.productInFrame!==false;
+ const t=people?(String(aiSettings.tplVidPeople||'').trim()||TPL_VID_PEOPLE):(String(aiSettings.tplVidProduct||'').trim()||TPL_VID_PRODUCT);
+ let out=(inFrame?t.replace(/\[\[([\s\S]*?)\]\]/g,'$1'):t.replace(/\s*\[\[[\s\S]*?\]\]/g,'')).replace(/[ \t]{2,}/g,' ').trim();
+ if(inFrame&&!/inscriptions/i.test(out))out+=' The product is never changed or distorted: all its inscriptions and especially the logo stay exactly as in the first frame — same text, sharp and legible, never morphing, flickering or rewriting.';
+ if(people&&aiSettings.noFaces)out+=' Faces stay as in the first frame — nobody turns their face toward the camera.';
+ return out;
 }
 function videoPrompt(s){return (s.ai?.vidPrompt||'').trim()||autoVideoPrompt(s);}
 
@@ -1298,7 +1310,7 @@ async function planScenes(targets,j,{replan=false}={}){
   environment:a.environment,environment_references:(j.aiEnvRefs||[]).length?(a.env_list||'').trim()||(j.aiEnvRefs.length+' references, no descriptions'):undefined,
   scenes_to_plan:targets.map(s=>{const fb=String(s.ai?.feedback||'').trim(),o={n:list.indexOf(s)+1,text:scenePlain(s)};if(s.ai?.productManual)o.product_in_frame=s.ai.productInFrame!==false;if(replan){o.current_plan=s.ai?.shot||'(none)';if(fb)o.user_feedback=fb;else o.task='new variant';}return o;}),
   other_scenes:list.filter(s=>!tset.has(s)).map(s=>({n:list.indexOf(s)+1,text:scenePlain(s),plan:String(s.ai?.shot||'').trim()||'(not planned yet)',product_in_frame:s.ai?.productInFrame!==false}))};
- const r=await chatJSON([{role:'system',content:PLAN_SYSTEM},{role:'user',content:JSON.stringify(payload)}]);
+ const r=await chatJSON([{role:'system',content:PLAN_SYSTEM+'\n'+(aiSettings.noFaces?FACES_PLAN_RULE+'\n':'')+INTEGRITY_PLAN_RULE},{role:'user',content:JSON.stringify(payload)}]);
  const out=Array.isArray(r?.scenes)?r.scenes:[],str=v=>typeof v==='string'?v.trim().replace(/\.+$/,''):'';
  targets.forEach((s,k)=>{
   const n=list.indexOf(s)+1,p=out.find(x=>Number(x?.n)===n)||out[k]||{};
@@ -1381,7 +1393,16 @@ async function createVideoTask(uid){
 async function runVideo(uid){
  if(vidBusy.has(uid)||imgBusy.has(uid))return false;vidBusy.add(uid);setMsg(uid,'vid','run','Отправляю картинку в Seedance…');
  try{const id=await createVideoTask(uid);patchAI(uid,{task:id,video:'',videoUrl:'',vidModel:String(aiSettings.videoModel||'').trim(),vidRes:aiSettings.resolution,vidAudio:!!aiSettings.audio,vidRatio:aiSettings.format,vidDur:Math.round(Number(aiSettings.duration)||5),vidTokens:null,vidCost:null,vidEst:false});vidBusy.delete(uid);pollVideo(uid,id);return true;}
- catch(e){vidBusy.delete(uid);setMsg(uid,'vid','error',e.message);return false;}
+ catch(e){
+  vidBusy.delete(uid);
+  if(/real person|PrivacyInformation/i.test(e.message)){
+   const f=findScene(uid),fix='Лица людей не должны быть видны чётко: человек со спины, вполоборота, издалека, в расфокусе или лицо в тени';
+   if(f&&!String(f.s.ai?.feedback||'').trim())patchAI(uid,{feedback:fix,regen:true});else if(f)patchAI(uid,{regen:true});
+   setMsg(uid,'vid','error','Seedance не принял картинку: на ней реалистичное лицо, а Seedance 2.0/2.5 такие картинки не берёт (даже сгенерированные). Сцена отмечена «Перегенерировать», в «Что изменить» подставлена подсказка — перегенерируй картинку и снова нажми «Сгенерировать видео».'+(aiSettings.noFaces?'':' Включи «Без чётких лиц» в настройках, чтобы новые кадры сразу были без лиц.'));
+   refreshRegenCount();
+  }else setMsg(uid,'vid','error',e.message);
+  return false;
+ }
 }
 async function pollVideo(uid,id){
  if(aiPolling.has(id))return;aiPolling.add(id);vidBusy.add(uid);const t0=Date.now();let failures=0;
@@ -1730,7 +1751,7 @@ function showTab(t){
 document.querySelectorAll('[data-tab-btn]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tabBtn)));
 $('keysGo').addEventListener('click',()=>showTab('settings'));
 function refreshKeysNotice(){$('keysNotice').hidden=!!String(aiSettings.openaiKey).trim()||!!aiProxy;}
-const aiFields={aiOpenaiKey:'openaiKey',aiImageQuality:'imageQuality',aiFormat:'format',aiArkKey:'arkKey',aiArkBase:'arkBase',aiResolution:'resolution',aiDuration:'duration',aiWatermark:'watermark',aiLegacy:'legacyFlags',aiStyle:'style'};
+const aiFields={aiOpenaiKey:'openaiKey',aiImageQuality:'imageQuality',aiFormat:'format',aiArkKey:'arkKey',aiArkBase:'arkBase',aiResolution:'resolution',aiDuration:'duration',aiWatermark:'watermark',aiNoFaces:'noFaces',aiLegacy:'legacyFlags',aiStyle:'style'};
 for(const [id,k] of Object.entries(aiFields)){const el=$(id);
  if(el.type==='checkbox')el.checked=!!aiSettings[k];else el.value=aiSettings[k];
  el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',()=>{aiSettings[k]=el.type==='checkbox'?el.checked:el.type==='number'?Number(el.value):el.value;saveAISettings();if(k==='format')applyFormat();if(k==='openaiKey')refreshKeysNotice();});
