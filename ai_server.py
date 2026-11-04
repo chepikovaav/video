@@ -47,8 +47,8 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 def load_dotenv(path):
-    """KEY=VALUE lines; values already set in the environment win."""
-    loaded = []
+    """KEY=VALUE lines; a repeated key takes its last value; the real environment wins."""
+    values, loaded = {}, []
     try:
         with open(path, encoding="utf-8-sig") as f:
             lines = f.read().splitlines()
@@ -68,7 +68,10 @@ def load_dotenv(path):
             value = value[1:-1]
         else:
             value = value.split(" #", 1)[0].rstrip()
-        if value and not os.environ.get(key):
+        if value:
+            values[key] = value
+    for key, value in values.items():
+        if not os.environ.get(key):
             os.environ[key] = value
             loaded.append(key)
     return loaded
@@ -386,16 +389,22 @@ CODEX_HOME = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp")
 
 
+_warned_bin = []
+
+
 def find_codex():
-    explicit = os.environ.get("CODEX_BIN", "").strip()
-    if explicit:
-        return explicit if os.path.isfile(explicit) else None
+    explicit = os.path.expanduser(os.environ.get("CODEX_BIN", "").strip())
+    if explicit and os.path.isfile(explicit):
+        return explicit
+    if explicit and not _warned_bin:
+        _warned_bin.append(explicit)
+        print(f"  CODEX_BIN={explicit}: такого файла нет, ищу Codex сам")
     found = shutil.which("codex")
     if found:
         return found
     # Finder-launched .command files often miss Homebrew / npm paths.
     home = os.path.expanduser("~")
-    candidates = ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", home + "/.local/bin/codex",
+    candidates = [home + "/.local/bin/codex", "/opt/homebrew/bin/codex", "/usr/local/bin/codex",
                   home + "/.npm-global/bin/codex", home + "/.bun/bin/codex", home + "/.volta/bin/codex"]
     candidates += sorted(glob.glob(home + "/.nvm/versions/node/*/bin/codex"), reverse=True)
     for c in candidates:
