@@ -99,7 +99,7 @@
 <div class="field"><label>Фото продукта <span class="muted" id="photoCount"></span></label><div class="dropzone" id="photoDrop" tabindex="0" role="button" aria-label="Добавить фото продукта"><div class="thumbs" id="photoThumbs"></div><p id="photoHint"></p></div><input type="file" id="photoFile" accept="image/*" multiple hidden></div>
 <div class="field"><label>Референсы окружения <span class="muted">необязательно, до 10 — как продукт выглядит в реальной обстановке</span> <span class="muted" id="envCount"></span></label><div class="dropzone" id="envDrop" tabindex="0" role="button" aria-label="Добавить референсы окружения"><div class="thumbs" id="envThumbs"></div><p id="envHint"></p></div><input type="file" id="envFile" accept="image/*" multiple hidden></div>
 <div class="field"><label for="amazonUrl">Ссылка на Amazon <span class="muted">необязательно — оттуда берутся название, характеристики и размеры продукта</span></label><div class="amazon-row"><input id="amazonUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="https://www.amazon.com/dp/…"><button type="button" class="small" id="amazonLoad">Загрузить данные</button></div><p class="muted" id="amazonStatus" role="status" aria-live="polite"></p><details id="amazonBox" hidden><summary>Данные с Amazon — посмотреть и поправить</summary><textarea id="amazonText" maxlength="8000" spellcheck="false"></textarea></details></div>
-<div class="button-row start-row"><button type="button" id="aiStart" class="primary big">Начать</button><button type="button" id="aiStop" class="small" hidden>Остановить</button><button id="apply" type="button" class="small" title="Без анализа и генерации картинок">Только разбить на сцены</button><span id="bulkStatus" class="muted" role="status"></span></div><label class="ai-check pause-check"><input type="checkbox" id="aiPausePlan">Остановиться после раскадровки, чтобы проверить её до генерации картинок</label><p class="muted">Готовые картинки при «Начать» не перегенерируются — создаются только недостающие.</p>
+<div class="button-row start-row"><button type="button" id="aiStart" class="primary big">Начать</button><button type="button" id="aiStop" class="small" hidden>Остановить</button><button id="apply" type="button" class="small" title="Без анализа и генерации картинок">Только разбить на сцены</button><span id="bulkStatus" class="muted" role="status"></span></div><label class="ai-check pause-check"><input type="checkbox" id="aiPausePlan">Остановиться после раскадровки, чтобы проверить её до генерации картинок</label><p class="muted">«Начать» каждый раз пересоздаёт всё: анализ, сцены, раскадровку и все картинки. Чтобы переделать отдельные сцены, отметь в них «Перегенерировать». Проект сохраняется автоматически — после закрытия откроется в том же состоянии.</p>
 <ol class="pipeline" id="pipeline" hidden><li data-step="amazon">Данные продукта с Amazon</li><li data-step="analyze">Анализ продукта по фото</li><li data-step="split">Разбивка скрипта на сцены</li><li data-step="plan">Раскадровка всех сцен: без повторов, только видимые детали, один цельный кадр</li><li data-step="images">Генерация картинок</li></ol><p class="muted" id="pipeStatus" role="status" aria-live="polite"></p>
 <input type="file" id="aiFrameFile" accept="image/*" hidden></section>
 <section class="panel step" id="stepAnalysis" aria-labelledby="stepAnalysisTitle" hidden><div class="step-head"><span class="step-num">2</span><div><h2 id="stepAnalysisTitle">Описание продукта</h2><p class="muted">Результат анализа фото. Поправь, если что-то не так — особенно выделенное: назначение, размер, известные и неизвестные детали.</p></div><button type="button" class="small" id="aiReanalyze">Проанализировать заново</button></div><div class="ai-grid" id="analysisFields"></div><p class="muted" id="analysisStatus" role="status"></p></section>
@@ -847,8 +847,8 @@ function stash(){
  workspace.activeProfileId=currentProfileId;workspace.activeJobId=currentJobId;workspace.lastJobByProfile[currentProfileId]=currentJobId;
 }
 function persist(){
- clearTimeout(persistTimer);stash();try{localStorage.setItem(STORAGE_KEY,JSON.stringify(workspace));storageOK=true;$('storageStatus').textContent='Изменения сохранены в этом браузере';$('storageStatus').classList.remove('error');}
- catch{storageOK=false;$('storageStatus').textContent='Автосохранение браузера недоступно — сохрани JSON';$('storageStatus').classList.add('error');}
+ clearTimeout(persistTimer);stash();mirrorWorkspace();try{localStorage.setItem(STORAGE_KEY,JSON.stringify(workspace));try{localStorage.setItem(STORAGE_KEY+':savedAt',String(Date.now()));}catch{}storageOK=true;$('storageStatus').textContent='Изменения сохранены в этом браузере';$('storageStatus').classList.remove('error');}
+ catch{storageOK=false;$('storageStatus').textContent='Основное хранилище браузера недоступно — проект сохраняется копией в IndexedDB. На всякий случай сохрани JSON';$('storageStatus').classList.add('error');}
 }
 function markDirty(){stash();clearTimeout(persistTimer);$('storageStatus').textContent='Сохраняю…';$('storageStatus').classList.remove('error');persistTimer=setTimeout(persist,250);}
 function renderProfiles(){
@@ -1419,6 +1419,27 @@ function costLine(a){
  return modelName(a.vidModel)+' · '+a.vidRes+' · '+(a.vidAudio?'со звуком':'без звука')+' · '+a.vidDur+' с — '+(a.vidEst?'≈':'')+fmtTok(a.vidTokens)+' токенов · '+(a.vidEst?'≈':'')+fmtUSD(a.vidCost||0)+(a.vidEst?' (оценка: Seedance не вернул число токенов)':'');
 }
 
+// --- project backup in IndexedDB ---
+// The workspace (scripts, analysis, storyboard, scene texts, feedback, version
+// history) is saved to localStorage and mirrored into IndexedDB. On start the
+// newer copy wins, so a full or cleared localStorage does not lose the project.
+const WS_BACKUP_KEY='__workspace__';let mirrorReady=false,mirrorTimer=null;
+function mirrorWorkspace(){
+ if(!mirrorReady||!workspace)return;clearTimeout(mirrorTimer);
+ mirrorTimer=setTimeout(()=>{try{mediaDB.put(WS_BACKUP_KEY,{savedAt:Date.now(),data:JSON.stringify(workspace)}).catch(()=>{});}catch{}},300);
+}
+async function restoreWorkspaceBackup(){
+ try{
+  const b=await mediaDB.get(WS_BACKUP_KEY);
+  if(b&&typeof b.data==='string'&&(!hadLocal||initialError||b.savedAt>localSavedAt+2000)){
+   const ws=validateWorkspace(JSON.parse(b.data));workspace=ws;loadJob(workspace.activeJobId);
+   try{localStorage.setItem(STORAGE_KEY,JSON.stringify(workspace));localStorage.setItem(STORAGE_KEY+':savedAt',String(b.savedAt));}catch{}
+   setStatus('Проект восстановлен из копии в IndexedDB — всё на месте.');
+  }
+ }catch{}
+ mirrorReady=true;mirrorWorkspace();
+}
+
 // --- pipeline («Начать») ---
 function pipeStep(step,state){const li=document.querySelector('#pipeline [data-step="'+step+'"]');if(li)li.dataset.state=state;}
 function pipeMsg(t,error=false){$('pipeStatus').textContent=t;$('pipeStatus').classList.toggle('error',error);}
@@ -1443,8 +1464,8 @@ async function generateImages(targets,j,{replan=false,pause=false}={}){
  pipeStep('images',fail?'error':'done');
  pipeMsg(fail?'Картинки: готово '+ok+', с ошибкой '+fail+'. Текст ошибки — в сцене, там же «Сгенерировать заново».':'Картинки готовы: '+ok+'. Проверь каждую и нажми «Сгенерировать видео» у одобренных.',!!fail);
 }
-async function ensureAnalysis(j){
- if(j.aiAnalysis&&j.aiAnalysisSig===photoSig(j)){pipeStep('analyze','done');return;}
+async function ensureAnalysis(j,{force=false}={}){
+ if(!force&&j.aiAnalysis&&j.aiAnalysisSig===photoSig(j)){pipeStep('analyze','done');return;}
  pipeStep('analyze','run');pipeMsg('Анализирую фото продукта…');
  try{j.aiAnalysis=await analyzeProduct(j);j.aiAnalysisSig=photoSig(j);persist();renderAnalysis();pipeStep('analyze','done');}
  catch(e){pipeStep('analyze','error');throw e;}
@@ -1457,23 +1478,15 @@ async function startPipeline(){
  let result;try{result=prepareScript($('bulk').value,$('separator').value,{highlights:$('autoHighlight').checked,wrap:$('autoWrap').checked});}catch(e){throw Error('Скрипт: '+e.message);}
  if(!j.aiPhotos.length)throw Error('Добавь хотя бы одно фото продукта.');
  if(!hasKey('openai'))throw Error('Нет ключа OpenAI. Укажи его во вкладке «Настройки».');
- // Keep what is already generated: same text → same scene; otherwise the scene
- // at the same position keeps its image. Only scenes without an image are generated.
- const old=scenes.slice(),newList=normalizeScenes(result.list),assign=new Array(newList.length).fill(null),used=new Set();
- newList.forEach((x,i)=>{const k=plainKey(x.text),m=old.findIndex((o,oi)=>!used.has(oi)&&o.ai&&plainKey(o.text)===k);if(m>=0){assign[i]=old[m].ai;used.add(m);}});
- newList.forEach((x,i)=>{if(!assign[i]&&old[i]&&!used.has(i)&&old[i].ai?.image){assign[i]=old[i].ai;used.add(i);}});
- const dropped=old.filter((o,oi)=>!used.has(oi)&&o.ai?.image).length;
- if(dropped&&!confirm('Картинок, которые не подходят ни к одной сцене нового скрипта: '+dropped+'. Они уберутся из ролика (вернуть можно кнопкой «↶ Отменить»). Продолжить?'))return;
+ if(scenes.some(x=>x.ai?.image||x.ai?.video||x.ai?.videoUrl||x.ai?.task)&&!confirm('Все сцены, картинки и видео будут созданы заново. Продолжить?'))return;
  setRunning(true);aiStop=false;resetPipeline();
  try{
   await ensureAmazon(j);if(aiStop)throw STOPPED;
-  await ensureAnalysis(j);if(aiStop)throw STOPPED;
+  await ensureAnalysis(j,{force:true});if(aiStop)throw STOPPED;
   pipeStep('split','run');checkpoint();if($('mode').value==='original'&&result.list.length!==7)$('mode').value='flexible';
-  scenes=newList.map((x,i)=>({text:x.text,manual:x.manual,ai:assign[i]||normalizeAI({}),id:uuid()}));renderCards();markDirty();
-  const kept=scenes.filter(x=>x.ai?.image).length,targets=scenes.filter(x=>!x.ai?.image&&scenePlain(x));
-  pipeStep('split','done');$('bulkStatus').textContent='Сцен: '+scenes.length+(kept?' · с готовой картинкой: '+kept:'')+'.';
-  if(!targets.length){pipeStep('plan','done');pipeStep('images','done');pipeMsg('У всех сцен уже есть картинки. Чтобы переделать, отметь «Перегенерировать» в нужных сценах.');return;}
-  await generateImages(targets,j,{pause:$('aiPausePlan').checked});
+  scenes=normalizeScenes(result.list).map(x=>({text:x.text,manual:x.manual,ai:normalizeAI({}),id:uuid()}));renderCards();markDirty();
+  pipeStep('split','done');$('bulkStatus').textContent='Сцен: '+scenes.length+'.';
+  await generateImages(scenes.filter(x=>scenePlain(x)),j,{pause:$('aiPausePlan').checked});
   if(!$('aiPausePlan').checked)setStatus('Картинки готовы. Проверь их и запускай видео по одной сцене.');
  }catch(e){pipeMsg(e.message,e!==STOPPED);setStatus(e.message,e!==STOPPED);}
  finally{setRunning(false);}
@@ -1810,7 +1823,7 @@ $('aiClean').addEventListener('click',async()=>{
  try{stash();const used=new Set();
   for(const list of [scenes,...workspace.jobs.map(j=>j.scenes),...undoStack.map(u=>u.scenes)])for(const s of list)for(const v of [s.ai||{},...(s.ai?.history||[])]){if(v.image)used.add(v.image);if(v.video)used.add(v.video);}
   for(const j of workspace.jobs){for(const k of [...(j.aiPhotos||[]),...(j.aiEnvRefs||[])])used.add(k);}
-  let n=0;for(const k of await mediaDB.keys())if(!used.has(k)){await mediaDB.del(k);aiMedia.delete(k);n++;}
+  let n=0;for(const k of await mediaDB.keys())if(!used.has(k)&&!String(k).startsWith('__')){await mediaDB.del(k);aiMedia.delete(k);n++;}
   setStatus('Удалено неиспользуемых файлов: '+n+'.');
  }catch(e){setStatus(e.message,true);}
 });
@@ -1819,9 +1832,10 @@ refreshKeysNotice();checkProxy().then(refreshKeysNotice);
 
 // Browsers may isolate storage for file:// pages. A JSON backup remains the
 // portable source of truth and no file outside the explicit selection is read.
-let initialError='';try{const saved=localStorage.getItem(STORAGE_KEY);workspace=saved?validateWorkspace(JSON.parse(saved)):initialWorkspace();storageOK=true;}catch(e){workspace=initialWorkspace();initialError=e.message;}
+let initialError='',localSavedAt=0,hadLocal=false;try{localSavedAt=Number(localStorage.getItem(STORAGE_KEY+':savedAt'))||0;}catch{}try{const saved=localStorage.getItem(STORAGE_KEY);hadLocal=!!saved;workspace=saved?validateWorkspace(JSON.parse(saved)):initialWorkspace();storageOK=true;}catch(e){workspace=initialWorkspace();initialError=e.message;}
 $('launchWarning').hidden=!launchContext.blocked;$('launchMode').textContent=launchContext.blocked?'Предпросмотр · экспорт открывай локально':launchContext.local?'Локальный HTML · сеть только для AI по кнопке':'Отдельная страница · сеть только для AI по кнопке';
 loadJob(workspace.activeJobId);persist();if(initialError)setStatus('Открыта начальная библиотека. Храни JSON-копию: локальное хранилище было недоступно или не прочиталось.',true);else setStatus('Выбери постоянный проект, открой или создай ролик. Импорт доступен рядом с сохранением.');
+restoreWorkspaceBackup();
 window.TitleTool={parse,chars,timing,scenePlan,buildDRT,splitScript,wrapTwo,prepareScript,suggestHighlights,storeZlib,template:T,fillTexts,normalizeProfile,patchProfileBody,readZipSelected,importDRT,importFile,installDraft,mergeWorkspace,validateWorkspace,getState:()=>draftObject(),getWorkspace:()=>{stash();return copy(workspace);},switchProfile,persist,profile:()=>copy(profile())};
 
 </script>
