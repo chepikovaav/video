@@ -133,6 +133,17 @@
 <div><label for="aiDuration">Длительность, с</label><input id="aiDuration" type="number" min="2" max="15" step="1"></div>
 <div class="wide"><label class="ai-check faces-check"><input type="checkbox" id="aiNoFaces">Без чётких лиц людей на картинках — нужно для Seedance 2.0 и 2.5: они не принимают картинки с реалистичными лицами («may contain real person»). Люди будут со спины, вполоборота, издалека, в расфокусе или в тени.</label></div>
 <div class="wide"><p class="video-estimate" id="videoEstimate"></p><label class="ai-check"><input type="checkbox" id="aiWatermark">Водяной знак Seedance</label><label class="ai-check"><input type="checkbox" id="aiLegacy">Параметры текстом в промпте (для старых моделей Seedance 1.0)</label></div>
+<div><label for="aiVideoMode">Как делать видео</label><select id="aiVideoMode"><option value="reference">Из текста, картинка — референс</option><option value="first_frame">Картинка — первый кадр</option></select></div>
+<div class="wide"><p class="muted" id="videoModeHint"></p></div>
+<h3 class="wide" id="assetTitle">Люди в видео: библиотека AI-портретов BytePlus</h3>
+<div class="wide"><label class="ai-check"><input type="checkbox" id="aiAssetLib">Регистрировать картинки с людьми как AI-портреты (тогда Seedance 2.x принимает лица)</label><p class="muted">Картинка сцены загружается в твой бакет TOS, регистрируется в «Private virtual portrait library» как AI-сгенерированный портрет и уходит в Seedance ссылкой asset://. Нужен запущенный AI-сервер и ключи аккаунта BytePlus (не ключ ModelArk). Пошаговая настройка — в README. Бесплатный уровень: до 50 портретов и 3 регистрации в минуту.</p></div>
+<div><label for="aiBpAk">Access Key ID</label><input id="aiBpAk" type="password" autocomplete="off" spellcheck="false" placeholder="AKLT…"></div>
+<div><label for="aiBpSk">Secret Access Key</label><input id="aiBpSk" type="password" autocomplete="off" spellcheck="false"></div>
+<div><label for="aiTosBucket">Бакет TOS</label><input id="aiTosBucket" autocomplete="off" spellcheck="false" placeholder="например, nastya-video-frames"></div>
+<div><label for="aiTosEndpoint">Адрес TOS</label><input id="aiTosEndpoint" autocomplete="off" spellcheck="false"></div>
+<div><label for="aiBpRegion">Регион</label><input id="aiBpRegion" autocomplete="off" spellcheck="false"></div>
+<div><label for="aiBpProject">Проект ModelArk</label><input id="aiBpProject" autocomplete="off" spellcheck="false"></div>
+<div class="wide"><label class="ai-check"><input type="checkbox" id="aiAssetDelete">Удалять портрет из библиотеки после готового видео (чтобы не упереться в лимит 50)</label><div class="button-row"><button type="button" class="small" id="aiAssetCheck">Проверить доступ</button></div><p class="muted" id="assetStatus" role="status"></p></div>
 <h3 class="wide">Формат кадра</h3>
 <div><label for="aiFormat">Формат картинок и видео</label><select id="aiFormat"><option value="9:16">9:16 — вертикальный</option><option value="16:9">16:9 — горизонтальный</option><option value="1:1">1:1 — квадрат</option></select></div>
 <div class="wide"><p class="muted">Таймлайн .drt остаётся 1920 × 1080: вертикальные видео в Resolve нужно масштабировать или поставить проект 1080 × 1920.</p></div>
@@ -151,8 +162,9 @@
 <label for="tplImage">Картинка — общий шаблон</label><textarea id="tplImage" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplImageReset">По умолчанию</button></div>
 <label for="tplBlockIn" style="margin-top:12px">Блок {PRODUCT_BLOCK} — продукт в кадре</label><textarea id="tplBlockIn" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplBlockInReset">По умолчанию</button></div>
 <label for="tplBlockOut" style="margin-top:12px">Блок {PRODUCT_BLOCK} — продукта нет в кадре</label><textarea id="tplBlockOut" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplBlockOutReset">По умолчанию</button></div>
-<label for="tplVidPeople" style="margin-top:12px">Видео — в кадре есть люди</label><textarea id="tplVidPeople" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplVidPeopleReset">По умолчанию</button></div>
-<label for="tplVidProduct" style="margin-top:12px">Видео — людей нет</label><textarea id="tplVidProduct" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplVidProductReset">По умолчанию</button></div></details></div>
+<label for="tplVidRef" style="margin-top:12px">Видео из текста с картинкой-референсом (режим по умолчанию)</label><textarea id="tplVidRef" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplVidRefReset">По умолчанию</button></div>
+<label for="tplVidPeople" style="margin-top:12px">Видео «картинка — первый кадр»: в кадре есть люди</label><textarea id="tplVidPeople" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplVidPeopleReset">По умолчанию</button></div>
+<label for="tplVidProduct" style="margin-top:12px">Видео «картинка — первый кадр»: людей нет</label><textarea id="tplVidProduct" class="tpl" spellcheck="false"></textarea><div class="button-row"><button type="button" class="small" id="tplVidProductReset">По умолчанию</button></div></details></div>
 <h3 class="wide">Соединение</h3>
 <div class="wide"><p><span class="badge" id="aiConn">Проверяю соединение…</span></p><p class="muted">OpenAI обычно отвечает браузеру напрямую. Если появляется «Нет соединения» (чаще у Seedance), запусти рядом с этим HTML <strong>«Запустить AI-сервер.command»</strong> или <code>python3 ai_server.py</code> и нажми «Проверить соединение». Страницу можно оставить открытой как файл.</p><div class="button-row"><button type="button" class="small" id="aiCheck">Проверить соединение</button><button type="button" class="small" id="aiClean">Очистить неиспользуемые файлы</button></div></div>
 <h3 class="wide" id="recoveryTitle">Восстановление</h3>
@@ -1099,12 +1111,16 @@ const TPL_BLOCK_IN='ENVIRONMENT: the product is placed in a real, lived-in envir
 const TPL_BLOCK_OUT='NO PRODUCT IN FRAME: the product itself must NOT appear in this image, not even partially or in the background. Instead, show a moment from the world around the product — people, hands, objects, places or activities connected to it — that conveys the feeling of the scene. The setting must stay consistent with the rest of the ad (same era, mood and type of environment). Focus on one clear, emotional subject.';
 const MAX_VERSIONS=12,VERSION_FIELDS=['image','video','videoUrl','vidModel','vidRes','vidRatio','vidDur','vidTokens','vidCost','vidEst','vidAudio','people','shot','planPeople','location','framing','note','feeling','productInFrame','vnote'];
 const TPL_VID_PEOPLE='Animate this image. The person calmly and naturally continues the action shown in the first frame at a normal, realistic pace. No sudden or fast movements. Slow, smooth camera movement throughout (gentle dolly or slight pan). [[The product keeps its exact shape, proportions and size; nothing on it opens, slides out, lights up or changes; no new parts appear; nothing is inserted into it unless it is clearly shown in the first frame. Its logo stays perfectly stable and undistorted — no warping, melting or floating.]] Objects in the scene keep their shape. Skin, hair and faces remain realistic and consistent with the first frame. One continuous shot, no split screen or cuts. No text or graphic effects appear.';
+const TPL_VID_REF='Photorealistic commercial video shot for a {product} ad. Scene: {shot_plan} It communicates: "{scene_text}" and evokes this feeling: {feeling}. Location: {environment}.\nImage 1 is the visual reference for this shot: keep its setting, people, wardrobe, lighting, colors and composition, and bring that moment to life.\n[[Images 2–{last_image} show the real product: it must look exactly like them — identical shape, proportions, colors, materials, label and logo.]]\nMOTION: {motion}\nOne continuous shot from one camera, no cuts, no split screen. No text, captions or graphic effects appear.';
+const MOTION_PEOPLE='The person calmly and naturally continues the action at a normal, realistic pace; no sudden or fast movements. Slow, smooth camera movement throughout (gentle dolly or slight pan). Skin, hair and faces stay realistic.';
+const MOTION_PRODUCT='Slow, smooth cinematic camera move: a gentle orbit around the main subject within its visible sides (no reveal of the back or bottom) or a slow push-in. The camera is always moving, never fast or jerky; nothing opens, moves or changes, and no new objects appear.';
 const TPL_VID_PRODUCT='Slow, smooth cinematic camera move: a gentle orbit around the main subject within its visible sides only (no reveal of the back or bottom) OR a slow push-in. The camera is always moving, but never fast or jerky. The main subject stays still and sharp, keeping its exact shape and proportions; nothing opens, moves or changes, and no new objects appear. [[The product\'s logo and text remain perfectly stable and undistorted, no warping or floating.]] Keep lighting and environment consistent with the first frame. One continuous shot, no split screen or cuts. No text or graphic effects appear.';
 const FORMAT_SIZE={'9:16':'1024x1536','16:9':'1536x1024','1:1':'1024x1024'};
 const AI_DEFAULTS={openaiKey:'',imageModel:'gpt-image-2',visionModel:'gpt-5-mini',imageQuality:'high',format:'9:16',
  arkKey:'',arkBase:'https://ark.ap-southeast.bytepluses.com/api/v3',videoModel:'dreamina-seedance-2-0-260128',resolution:'720p',duration:5,audio:false,watermark:false,legacyFlags:false,
  noFaces:true,style:'',tplImage:'',tplBlockIn:'',tplBlockOut:'',tplVidPeople:'',tplVidProduct:'',
- prices:{'dreamina-seedance-2-0-260128':7,'dreamina-seedance-2-0-fast-260128':4.2,'dreamina-seedance-2-0-mini-260615':1.4,other:7},v:3};
+ prices:{'dreamina-seedance-2-0-260128':7,'dreamina-seedance-2-0-fast-260128':4.2,'dreamina-seedance-2-0-mini-260615':1.4,other:7},v:4,
+ videoMode:'reference',tplVidRef:'',assetLib:false,bpAk:'',bpSk:'',tosBucket:'',tosEndpoint:'tos-ap-southeast-1.bytepluses.com',bpRegion:'ap-southeast-1',bpProject:'default',assetDelete:true};
 const SEEDANCE_MODELS={'dreamina-seedance-2-0-260128':'Seedance 2.0','dreamina-seedance-2-0-fast-260128':'Seedance 2.0 Fast','dreamina-seedance-2-0-mini-260615':'Seedance 2.0 Mini'};
 const LEDGER_KEY='nastya-ai-ledger-v1';
 const ANALYSIS_FIELDS=[['name','Продукт'],['category','Тип продукта'],['purpose','Для чего используется','wide',true],['users','Кто использует'],['places','Где обычно применяют'],['size_cm','Реальный размер, см (Ш × В × Г)',false,true],['handling','Как держат или ставят рядом с человеком','wide',true],['proportions','Пропорции (высота : ширина : глубина)'],['shape','Форма'],['colors','Цвета'],['materials','Материалы'],['logo_present','Логотип есть?'],['logo_location','Где логотип'],['logo_text','Текст логотипа'],['known_features','Известные детали — точно видны на фото, с указанием где','wide',true],['unknown_features','Неизвестные детали — не видны на фото или непонятны','wide',true],['usage_scenarios','Сценарии использования — 8–12 ситуаций (где, кто, когда, настроение)','wide',true],['associated_world','Мир вокруг продукта — предметы, занятия, места, ощущения, эпоха (для сцен без продукта)','wide',true],['details','Другие важные детали внешнего вида','wide'],['environment','Окружение для кадров','wide'],['env_list','Что на референсах окружения (по одному в строке: «1: …»)','wide']];
@@ -1129,7 +1145,9 @@ const PEOPLE_SYSTEM='Return only JSON {"people": true|false}. true if any person
 let aiSettings=(()=>{let o={};try{o=JSON.parse(localStorage.getItem(AI_KEY)||'{}')||{};}catch{}const s={...AI_DEFAULTS,...o};if(!o.format&&FORMAT_SIZE[o.ratio])s.format=o.ratio;if(!FORMAT_SIZE[s.format])s.format='9:16';s.prices={...AI_DEFAULTS.prices,...(o.prices&&typeof o.prices==='object'?o.prices:{})};
  if(!(o.v>=2)){s.resolution='720p';if(!SEEDANCE_MODELS[s.videoModel])s.videoModel=AI_DEFAULTS.videoModel;}
  // v3: templates gained {PRODUCT_BLOCK}, {feeling} and [[…]] product clauses; older custom templates are replaced by the new defaults.
- if(!(o.v>=3)){s.tplImage='';s.tplVidPeople='';s.tplVidProduct='';}s.v=3;return s;})();
+ if(!(o.v>=3)){s.tplImage='';s.tplVidPeople='';s.tplVidProduct='';}
+ // v4: video is built from the prompt with the scene picture as a reference (asked by the user).
+ if(!(o.v>=4))s.videoMode='reference';s.v=4;return s;})();
 let aiProxy='',aiUploadTarget='',aiStop=false,aiRunning=false;
 const imgBusy=new Set(),vidBusy=new Set(),aiMsg=new Map(),aiPolling=new Set(),aiGaveUp=new Set(),aiMedia=new Map();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -1142,7 +1160,7 @@ function normalizeAIBase(a){
  const str=(v,m)=>typeof v==='string'&&v.length<=m?v:'',bool=v=>v===true||v===false?v:null;
  return {uid:mediaId(a.uid)||uuid(),shot:str(a.shot,2000),planPeople:bool(a.planPeople),usesUnknown:a.usesUnknown===true,productInFrame:a.productInFrame!==false,productManual:a.productManual===true,env:Array.isArray(a.env)?a.env.map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=10).slice(0,2):[],envPlanned:a.envPlanned===true,people:bool(a.people),imgPrompt:str(a.imgPrompt,8000),vidPrompt:str(a.vidPrompt,8000),
   image:mediaId(a.image),video:mediaId(a.video),videoUrl:/^https:\/\//.test(a.videoUrl||'')?str(a.videoUrl,4000):'',task:mediaId(a.task),vidModel:str(a.vidModel,120),vidRes:str(a.vidRes,10),vidRatio:str(a.vidRatio,10),vidDur:Number.isFinite(a.vidDur)?a.vidDur:0,
-  vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true,vidAudio:a.vidAudio===true,location:str(a.location,600),framing:str(a.framing,40),feeling:str(a.feeling,600),vfeedback:str(a.vfeedback,1000),vnote:str(a.vnote,1000),regen:a.regen===true,feedback:str(a.feedback,1000),note:str(a.note,1000)};
+  vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true,vidAudio:a.vidAudio===true,location:str(a.location,600),framing:str(a.framing,40),feeling:str(a.feeling,600),assetId:mediaId(a.assetId),assetFor:mediaId(a.assetFor),vfeedback:str(a.vfeedback,1000),vnote:str(a.vnote,1000),regen:a.regen===true,feedback:str(a.feedback,1000),note:str(a.note,1000)};
 }
 function pickVersion(a){const o={};for(const k of VERSION_FIELDS)o[k]=a[k];return o;}
 function normalizeAI(a){
@@ -1279,12 +1297,25 @@ function sceneEnvKeys(s,j){
 }
 function imagePrompt(s,j){return (s.ai?.imgPrompt||'').trim()||autoImagePrompt(s,j);}
 function scenePeople(s){return s.ai?.people??s.ai?.planPeople??false;}
+function refProductKeys(s,j=job()){return s.ai?.productInFrame!==false?(j?.aiPhotos||[]).slice(0,3):[];}
 function autoVideoPrompt(s){
  const people=scenePeople(s),inFrame=s.ai?.productInFrame!==false;
- const t=people?(String(aiSettings.tplVidPeople||'').trim()||TPL_VID_PEOPLE):(String(aiSettings.tplVidProduct||'').trim()||TPL_VID_PRODUCT);
- let out=(inFrame?t.replace(/\[\[([\s\S]*?)\]\]/g,'$1'):t.replace(/\s*\[\[[\s\S]*?\]\]/g,'')).replace(/[ \t]{2,}/g,' ').trim();
- if(inFrame&&!/inscriptions/i.test(out))out+=' The product is never changed or distorted: all its inscriptions and especially the logo stay exactly as in the first frame — same text, sharp and legible, never morphing, flickering or rewriting.';
- if(people&&aiSettings.noFaces)out+=' Faces stay as in the first frame — nobody turns their face toward the camera.';
+ let out;
+ if(aiSettings.videoMode==='reference'){
+  const j=findScene(s.ai?.uid)?.j||job(),a=j?.aiAnalysis||{},nProd=refProductKeys(s,j).length;
+  let t=String(aiSettings.tplVidRef||'').trim()||TPL_VID_REF;
+  t=nProd?t.replace(/\[\[([\s\S]*?)\]\]/g,'$1'):t.replace(/\s*\[\[[\s\S]*?\]\]/g,'');
+  const name=[a.name,a.category&&'('+a.category+')'].filter(Boolean).join(' ')||'product';
+  out=t.replaceAll('{product}',name).replaceAll('{shot_plan}',String(s.ai?.shot||'').replace(/^Feeling: [^.]*\.\s*/,'').trim()||'the moment shown in Image 1.').replaceAll('{scene_text}',scenePlain(s))
+   .replaceAll('{feeling}',String(s.ai?.feeling||'').trim()||'the emotion of the scene text').replaceAll('{environment}',String(s.ai?.location||'').trim()||a.environment||'as in Image 1')
+   .replaceAll('{last_image}',String(1+nProd)).replaceAll('Images 2–2 show','Image 2 shows').replaceAll('{motion}',people?MOTION_PEOPLE:MOTION_PRODUCT);
+ }else{
+  const t=people?(String(aiSettings.tplVidPeople||'').trim()||TPL_VID_PEOPLE):(String(aiSettings.tplVidProduct||'').trim()||TPL_VID_PRODUCT);
+  out=(inFrame?t.replace(/\[\[([\s\S]*?)\]\]/g,'$1'):t.replace(/\s*\[\[[\s\S]*?\]\]/g,''));
+ }
+ out=out.replace(/[ \t]{2,}/g,' ').trim();
+ if(inFrame&&!/inscriptions/i.test(out))out+=' The product is never changed or distorted: all its inscriptions and especially the logo stay exactly as '+(aiSettings.videoMode==='reference'?'in the reference images':'in the first frame')+' — same text, sharp and legible, never morphing, flickering or rewriting.';
+ if(people&&aiSettings.noFaces)out+=' Faces stay as '+(aiSettings.videoMode==='reference'?'in Image 1':'in the first frame')+' — nobody turns their face toward the camera.';
  return out;
 }
 function videoFeedbackLine(fb){return 'USER CHANGES (highest priority): '+String(fb).trim().replace(/\.*$/,'')+'.';}
@@ -1406,6 +1437,22 @@ async function runImage(uid,{replan=false}={}){
  }catch(e){setMsg(uid,'img','error',e.message);return false;}
  finally{imgBusy.delete(uid);refreshAI(uid);}
 }
+function assetBody(extra={}){return {ak:aiSettings.bpAk,sk:aiSettings.bpSk,bucket:aiSettings.tosBucket,tosEndpoint:aiSettings.tosEndpoint,region:aiSettings.bpRegion,project:aiSettings.bpProject,...extra};}
+async function assetCall(path,extra){
+ if(!aiProxy)throw Error('Библиотеке портретов нужен запущенный AI-сервер: запусти «Запустить AI-сервер.command» и нажми «Проверить соединение».');
+ let r;try{r=await fetch(aiProxy+'/api/asset/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(assetBody(extra))});}
+ catch{throw Error('Нет связи с AI-сервером. Проверь, что окно сервера открыто.');}
+ const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d?.error?.message||('Ошибка библиотеки портретов: HTTP '+r.status));return d;
+}
+// Registers the scene picture as an AI-generated virtual portrait and returns
+// asset://<id>. Reuses the asset while it belongs to the same picture.
+async function sceneAssetUrl(uid,imgKey,blob){
+ const a=findScene(uid)?.s.ai||{};
+ if(a.assetId&&a.assetFor===imgKey)return 'asset://'+a.assetId;
+ setMsg(uid,'vid','run','Регистрирую картинку в BytePlus как AI-портрет… обычно до минуты, при нескольких сценах подряд — дольше.');
+ const dataUrl=await blobToDataURL(blob),d=await assetCall('register',{image:dataUrl.split(',')[1],mime:blob.type||'image/jpeg',name:'scene-'+uid.slice(0,8)});
+ patchAI(uid,{assetId:d.assetId,assetFor:imgKey});return 'asset://'+d.assetId;
+}
 async function createVideoTask(uid){
  const f=findScene(uid);if(!f)throw Error('Сцена удалена.');const s=f.s;
  if(!s.ai.image)throw Error('Сначала нужна картинка.');
@@ -1416,22 +1463,29 @@ async function createVideoTask(uid){
  const vfb=String(s.ai?.vfeedback||'').trim();
  if(vfb&&text.includes(vfb)){const en=await toEnglish(vfb);if(en!==vfb)text=text.replace(vfb,en);}
  if(aiSettings.legacyFlags)text+=' --resolution '+aiSettings.resolution+' --ratio '+aiSettings.format+' --duration '+dur+' --watermark '+!!aiSettings.watermark;
- const body={model,content:[{type:'text',text},{type:'image_url',image_url:{url:await blobToDataURL(first)},role:'first_frame'}]};
- if(!aiSettings.legacyFlags)Object.assign(body,{resolution:aiSettings.resolution,ratio:aiSettings.format,duration:dur,watermark:!!aiSettings.watermark});
+ if(/-(mini|fast)-/i.test(model)&&aiSettings.resolution==='1080p')throw Error('Seedance 2.0 Mini и Fast не делают 1080p — выбери 720p или 480p в настройках, либо модель Seedance 2.0.');
+ const useAsset=aiSettings.assetLib&&scenePeople(s);
+ const sceneUrl=useAsset?await sceneAssetUrl(uid,s.ai.image,first):await blobToDataURL(first);
+ const ref=aiSettings.videoMode==='reference';
+ const content=[{type:'text',text},{type:'image_url',image_url:{url:sceneUrl},role:ref?'reference_image':'first_frame'}];
+ if(ref)for(const k of refProductKeys(s,f.j)){const b=await getBlob(k);if(b)content.push({type:'image_url',image_url:{url:await blobToDataURL(b)},role:'reference_image'});}
+ setMsg(uid,'vid','run','Отправляю в Seedance…');
+ const body={model,content};
+ if(!aiSettings.legacyFlags)Object.assign(body,{resolution:aiSettings.resolution,ratio:!ref&&/2-5/.test(model)?'adaptive':aiSettings.format,duration:dur,watermark:!!aiSettings.watermark});
  if(!/seedance-1-0/i.test(model))body.generate_audio=!!aiSettings.audio;
  const d=await aiFetch('ark','/contents/generations/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  if(!d?.id)throw Error('Seedance не вернул номер задачи.');
  return String(d.id);
 }
 async function runVideo(uid){
- if(vidBusy.has(uid)||imgBusy.has(uid))return false;vidBusy.add(uid);setMsg(uid,'vid','run','Отправляю картинку в Seedance…');
+ if(vidBusy.has(uid)||imgBusy.has(uid))return false;vidBusy.add(uid);setMsg(uid,'vid','run','Готовлю запрос в Seedance…');
  try{const id=await createVideoTask(uid);const vfb=String(findScene(uid)?.s.ai?.vfeedback||'').trim();patchAI(uid,{task:id,video:'',videoUrl:'',vnote:vfb.slice(0,300),vfeedback:'',vidModel:String(aiSettings.videoModel||'').trim(),vidRes:aiSettings.resolution,vidAudio:!!aiSettings.audio,vidRatio:aiSettings.format,vidDur:Math.round(Number(aiSettings.duration)||5),vidTokens:null,vidCost:null,vidEst:false});vidBusy.delete(uid);pollVideo(uid,id);return true;}
  catch(e){
   vidBusy.delete(uid);
   if(/real person|PrivacyInformation/i.test(e.message)){
    const f=findScene(uid),fix='Лица людей не должны быть видны чётко: человек со спины, вполоборота, издалека, в расфокусе или лицо в тени';
    if(f&&!String(f.s.ai?.feedback||'').trim())patchAI(uid,{feedback:fix,regen:true});else if(f)patchAI(uid,{regen:true});
-   setMsg(uid,'vid','error','Seedance не принял картинку: на ней реалистичное лицо, а Seedance 2.0/2.5 такие картинки не берёт (даже сгенерированные). Сцена отмечена «Перегенерировать», в «Что изменить» подставлена подсказка — перегенерируй картинку и снова нажми «Сгенерировать видео».'+(aiSettings.noFaces?'':' Включи «Без чётких лиц» в настройках, чтобы новые кадры сразу были без лиц.'));
+   setMsg(uid,'vid','error','Seedance не принял картинку: на ней реалистичное лицо, а Seedance 2.0/2.5 такие картинки не берёт (даже сгенерированные). '+(aiSettings.assetLib?'Библиотека портретов включена, но картинка ушла без неё — проверь, что в кадре распознаны люди, или ':'Включи «Библиотеку AI-портретов» в настройках или ')+'перегенерируй картинку: сцена отмечена «Перегенерировать», в «Что изменить» подставлена подсказка.');
    refreshRegenCount();
   }else setMsg(uid,'vid','error',e.message);
   return false;
@@ -1451,7 +1505,8 @@ async function pollVideo(uid,id){
    if(st==='succeeded'){
     const url=d.content?.video_url;if(!url)throw Error('Seedance не вернул ссылку на видео.');
     const bill=billTask(id,d,findScene(uid)?.s.ai||{});
-    patchAI(uid,{task:'',videoUrl:url,video:'',...bill});setMsg(uid,'vid','run','Видео готово, сохраняю в браузер…');
+    patchAI(uid,{task:'',videoUrl:url,video:'',...bill});
+    {const av=findScene(uid)?.s.ai;if(aiSettings.assetDelete&&av?.assetId){const aid=av.assetId;patchAI(uid,{assetId:'',assetFor:''});assetCall('delete',{assetId:aid}).catch(()=>{});}}setMsg(uid,'vid','run','Видео готово, сохраняю в браузер…');
     try{const key=await storeMedia('vid',await fetchMedia(url));if(findScene(uid)?.s.ai?.videoUrl===url)patchAI(uid,{video:key});setMsg(uid,'vid','done','Готово за '+elapsed(t0)+'.');}
     catch{setMsg(uid,'vid','done','Видео готово, но сохранить его в браузер не удалось. Скачай по ссылке — она действует около 24 часов.');}
     return;
@@ -1802,7 +1857,7 @@ function showTab(t){
 document.querySelectorAll('[data-tab-btn]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tabBtn)));
 $('keysGo').addEventListener('click',()=>showTab('settings'));
 function refreshKeysNotice(){$('keysNotice').hidden=!!String(aiSettings.openaiKey).trim()||!!aiProxy;}
-const aiFields={aiOpenaiKey:'openaiKey',aiImageQuality:'imageQuality',aiFormat:'format',aiArkKey:'arkKey',aiArkBase:'arkBase',aiResolution:'resolution',aiDuration:'duration',aiWatermark:'watermark',aiNoFaces:'noFaces',aiLegacy:'legacyFlags',aiStyle:'style'};
+const aiFields={aiOpenaiKey:'openaiKey',aiImageQuality:'imageQuality',aiFormat:'format',aiArkKey:'arkKey',aiArkBase:'arkBase',aiResolution:'resolution',aiDuration:'duration',aiWatermark:'watermark',aiNoFaces:'noFaces',aiVideoMode:'videoMode',aiAssetLib:'assetLib',aiBpAk:'bpAk',aiBpSk:'bpSk',aiTosBucket:'tosBucket',aiTosEndpoint:'tosEndpoint',aiBpRegion:'bpRegion',aiBpProject:'bpProject',aiAssetDelete:'assetDelete',aiLegacy:'legacyFlags',aiStyle:'style'};
 for(const [id,k] of Object.entries(aiFields)){const el=$(id);
  if(el.type==='checkbox')el.checked=!!aiSettings[k];else el.value=aiSettings[k];
  el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',()=>{aiSettings[k]=el.type==='checkbox'?el.checked:el.type==='number'?Number(el.value):el.value;saveAISettings();if(k==='format')applyFormat();if(k==='openaiKey')refreshKeysNotice();});
@@ -1832,7 +1887,7 @@ $('aiArkBase').addEventListener('change',()=>{
  const next=volc?'doubao-'+core:(/^seedance-2/.test(core)?'dreamina-':'')+core;
  if(next!==m&&[...$('aiVideoModel').options].some(o=>o.value===next)){aiSettings.videoModel=next;saveAISettings();syncVideoModel();}
 });
-for(const [id,key,def] of [['tplImage','tplImage',TPL_IMAGE],['tplBlockIn','tplBlockIn',TPL_BLOCK_IN],['tplBlockOut','tplBlockOut',TPL_BLOCK_OUT],['tplVidPeople','tplVidPeople',TPL_VID_PEOPLE],['tplVidProduct','tplVidProduct',TPL_VID_PRODUCT]]){
+for(const [id,key,def] of [['tplVidRef','tplVidRef',TPL_VID_REF],['tplImage','tplImage',TPL_IMAGE],['tplBlockIn','tplBlockIn',TPL_BLOCK_IN],['tplBlockOut','tplBlockOut',TPL_BLOCK_OUT],['tplVidPeople','tplVidPeople',TPL_VID_PEOPLE],['tplVidProduct','tplVidProduct',TPL_VID_PRODUCT]]){
  const ta=$(id);ta.value=String(aiSettings[key]||'').trim()||def;
  ta.addEventListener('input',()=>{aiSettings[key]=ta.value.trim()===def.trim()?'':ta.value;saveAISettings();});
  $(id+'Reset').addEventListener('click',()=>{ta.value=def;aiSettings[key]='';saveAISettings();setStatus('Шаблон восстановлен.');});
@@ -1917,10 +1972,18 @@ for(const id of ['aiVideoModel','aiVideoModelCustom','aiResolution','aiDuration'
 $('videoSummary').addEventListener('click',()=>showTab('settings'));
 refreshVideoSettings();
 
+function refreshVideoModeHint(){$('videoModeHint').textContent=aiSettings.videoMode==='reference'?'Видео строится по промпту сцены (план кадра, текст, ощущение, движение). Картинка сцены — «Image 1», референс внешнего вида; если продукт в кадре, к ней добавляются до 3 фото продукта. Кадры видео не обязаны совпадать с картинкой пиксель в пиксель.':'Картинка сцены становится первым кадром видео, Seedance её «оживляет».';
+ $('assetStatus').textContent=aiSettings.assetLib&&!aiProxy?'Для библиотеки портретов запусти AI-сервер.':$('assetStatus').textContent;}
+$('aiVideoMode').addEventListener('change',()=>{refreshVideoModeHint();refreshVideoSettings();scenes.forEach(x=>refreshAI(x.ai?.uid));});
+$('aiAssetLib').addEventListener('change',()=>{refreshVideoModeHint();if(aiSettings.assetLib&&aiSettings.noFaces&&confirm('Библиотека портретов включена. Выключить «Без чётких лиц», чтобы новые картинки снова могли показывать лица?')){aiSettings.noFaces=false;$('aiNoFaces').checked=false;saveAISettings();}});
+$('aiAssetCheck').addEventListener('click',async()=>{const st=$('assetStatus');st.textContent='Проверяю доступ к BytePlus…';
+ try{await checkProxy();const d=await assetCall('check',{});st.textContent='Библиотека портретов (ModelArk OpenAPI): '+(d.ark==='ok'?'доступ есть ✓':d.ark)+' · Бакет TOS: '+(d.tos==='ok'?'запись работает ✓':d.tos);}
+ catch(e){st.textContent=e.message;}});
+refreshVideoModeHint();
 $('aiResetSettings').addEventListener('click',()=>{
  if(!confirm('Сбросить модели, параметры, стиль, шаблоны и цены к значениям по умолчанию?'))return;
  const keepKeys=confirm('Оставить ключи API?\n\nOK — оставить ключи. Отмена — удалить и ключи тоже.');
- const keys={openaiKey:aiSettings.openaiKey,arkKey:aiSettings.arkKey};
+ const keys={openaiKey:aiSettings.openaiKey,arkKey:aiSettings.arkKey,bpAk:aiSettings.bpAk,bpSk:aiSettings.bpSk,tosBucket:aiSettings.tosBucket};
  aiSettings={...AI_DEFAULTS,prices:{...AI_DEFAULTS.prices},...(keepKeys?keys:{})};saveAISettings();
  location.reload();
 });

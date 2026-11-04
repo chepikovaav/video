@@ -10,9 +10,16 @@ Listens only on 127.0.0.1. No dependencies beyond the Python standard library.
 Optional: keys can come from the environment instead of the page
 (OPENAI_API_KEY, ARK_API_KEY). A key typed in the page takes priority.
 """
+import base64
+import hashlib
+import hmac
 import http.server
 import json
 import re
+import threading
+import time
+import uuid
+from datetime import datetime, timezone
 import os
 import ssl
 import sys
@@ -54,6 +61,232 @@ def host_allowed(url, suffixes):
     p = urllib.parse.urlsplit(url)
     host = (p.hostname or "").lower()
     return p.scheme == "https" and any(host.endswith(s) for s in suffixes)
+
+
+# --- BytePlus private virtual-portrait library (AIGC assets) -----------------
+# Seedance 2.x rejects input images with realistic faces. BytePlus' documented
+# route for AI-generated people: put the image in the private asset library as
+# an AIGC "virtual portrait" and pass asset://<id> instead of the image.
+# Flow: upload to a private TOS bucket -> presigned GET URL -> CreateAsset ->
+# poll GetAsset until Active. Management calls need IAM AK/SK (V4 signatures);
+# the ModelArk API key is not accepted there.
+ARK_OPENAPI_VERSION = "2024-01-01"
+_asset_lock = threading.Lock()
+_last_create = [0.0]
+_groups = {}
+
+
+class AssetError(Exception):
+    pass
+
+
+def _hm(key, msg):
+    return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
+
+
+def _q(value, safe="-_.~"):
+    return urllib.parse.quote(str(value), safe=safe)
+
+
+def openapi_headers(ak, sk, host, region, query, body, now, service="ark", session_token=""):
+    """BytePlus OpenAPI V4 (HMAC-SHA256), same scheme as BytePlus' ark-mcp signer."""
+    date = now.strftime("%Y%m%dT%H%M%SZ")
+    short = date[:8]
+    payload_hash = hashlib.sha256(body).hexdigest()
+    hv = {"content-type": "application/json", "host": host, "x-content-sha256": payload_hash, "x-date": date}
+    if session_token:
+        hv["x-security-token"] = session_token
+    names = sorted(hv)
+    canonical = "\n".join([
+        "POST", "/", "&".join(f"{_q(k)}={_q(v)}" for k, v in sorted(query.items())),
+        "".join(f"{n}:{hv[n].strip()}\n" for n in names), ";".join(names), payload_hash])
+    scope = f"{short}/{region}/{service}/request"
+    sts = "\n".join(["HMAC-SHA256", date, scope, hashlib.sha256(canonical.encode("utf-8")).hexdigest()])
+    key = sk.encode("utf-8")
+    for part in (short, region, service, "request"):
+        key = _hm(key, part)
+    sig = hmac.new(key, sts.encode("utf-8"), hashlib.sha256).hexdigest()
+    headers = {"Host": host, "X-Date": date, "X-Content-Sha256": payload_hash, "Content-Type": "application/json",
+               "Authorization": f"HMAC-SHA256 Credential={ak}/{scope}, SignedHeaders={';'.join(names)}, Signature={sig}"}
+    if session_token:
+        headers["X-Security-Token"] = session_token
+    return headers
+
+
+def tos_signature(sk, region, date, canonical):
+    """TOS4-HMAC-SHA256, as in BytePlus' official `tos` Python SDK (auth.py)."""
+    sts = "\n".join(["TOS4-HMAC-SHA256", date, f"{date[:8]}/{region}/tos/request",
+                     hashlib.sha256(canonical.encode("utf-8")).hexdigest()])
+    key = sk.encode("utf-8")
+    for part in (date[:8], region, "tos", "request"):
+        key = _hm(key, part)
+    return hmac.new(key, sts.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def tos_request_headers(ak, sk, region, method, host, path, content_type, now):
+    date = now.strftime("%Y%m%dT%H%M%SZ")
+    hv = {"host": host, "x-tos-date": date}
+    if content_type:
+        hv["content-type"] = content_type
+    names = sorted(hv)
+    canonical = "\n".join([method, urllib.parse.quote(path, safe="/~"), "",
+                           "".join(f"{n}:{hv[n]}\n" for n in names), ";".join(names), "UNSIGNED-PAYLOAD"])
+    sig = tos_signature(sk, region, date, canonical)
+    headers = {"Host": host, "Date": date, "x-tos-date": date,
+               "Authorization": f"TOS4-HMAC-SHA256 Credential={ak}/{date[:8]}/{region}/tos/request, "
+                                f"SignedHeaders={';'.join(names)}, Signature={sig}"}
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
+
+
+def tos_presign_get(ak, sk, region, host, path, expires, now):
+    date = now.strftime("%Y%m%dT%H%M%SZ")
+    params = {"X-Tos-Algorithm": "TOS4-HMAC-SHA256", "X-Tos-Credential": f"{ak}/{date[:8]}/{region}/tos/request",
+              "X-Tos-Date": date, "X-Tos-Expires": str(expires), "X-Tos-SignedHeaders": "host"}
+    cqs = "&".join(f"{_q(k)}={_q(v)}" for k, v in sorted(params.items()))
+    canonical = "\n".join(["GET", urllib.parse.quote(path, safe="/~"), cqs, f"host:{host}\n", "host", "UNSIGNED-PAYLOAD"])
+    params["X-Tos-Signature"] = tos_signature(sk, region, date, canonical)
+    return f"https://{host}{urllib.parse.quote(path, safe='/~')}?" + "&".join(
+        f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(v, safe='')}" for k, v in params.items())
+
+
+def asset_cfg(body):
+    c = {
+        "ak": (body.get("ak") or os.environ.get("BYTEPLUS_ACCESS_KEY") or "").strip(),
+        "sk": (body.get("sk") or os.environ.get("BYTEPLUS_SECRET_KEY") or "").strip(),
+        "bucket": (body.get("bucket") or os.environ.get("BYTEPLUS_TOS_BUCKET") or "").strip(),
+        "region": (body.get("region") or "ap-southeast-1").strip(),
+        "tos": (body.get("tosEndpoint") or "tos-ap-southeast-1.bytepluses.com").strip().replace("https://", "").rstrip("/"),
+        "ark": (body.get("arkHost") or "ark.ap-southeast-1.byteplusapi.com").strip().replace("https://", "").rstrip("/"),
+        "project": (body.get("project") or "default").strip(),
+        "group": (body.get("group") or "video-projects-aigc").strip()[:60],
+    }
+    if not c["ak"] or not c["sk"]:
+        raise AssetError("Нет Access Key / Secret Key BytePlus. Укажи их в настройках приложения.")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", c["bucket"]):
+        raise AssetError("Укажи имя бакета TOS (строчные буквы, цифры и дефисы).")
+    for host in (c["tos"], c["ark"]):
+        if not re.fullmatch(r"[a-z0-9.-]+\.(bytepluses|byteplusapi|volces|volcengineapi)\.com", host):
+            raise AssetError("Неизвестный адрес BytePlus: " + host)
+    return c
+
+
+def openapi_call(c, action, body):
+    payload = json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    query = {"Action": action, "Version": ARK_OPENAPI_VERSION}
+    headers = openapi_headers(c["ak"], c["sk"], c["ark"], c["region"], query, payload, datetime.now(timezone.utc))
+    url = f"https://{c['ark']}/?" + "&".join(f"{_q(k)}={_q(v)}" for k, v in sorted(query.items()))
+    req = urllib.request.Request(url, data=payload, method="POST", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=60, context=CTX) as r:
+            data = json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            data = json.loads(e.read() or b"{}")
+        except Exception:
+            raise AssetError(f"{action}: HTTP {e.code}")
+    err = (data.get("ResponseMetadata") or {}).get("Error")
+    if err:
+        code, msg = err.get("Code", ""), err.get("Message", "")
+        hint = ""
+        if "AccessKey" in code or "Signature" in code or "SecretToken" in code:
+            hint = " Проверь Access Key и Secret Key."
+        elif "AccessDenied" in code or "Forbidden" in code or "NoPermission" in code:
+            hint = " У пользователя IAM нет прав: добавь политику ArkFullAccess."
+        raise AssetError(f"{action}: {code} {msg}".strip() + hint)
+    return data.get("Result") or {}
+
+
+def tos_put(c, key, data, content_type):
+    host = f"{c['bucket']}.{c['tos']}"
+    path = "/" + key
+    headers = tos_request_headers(c["ak"], c["sk"], c["region"], "PUT", host, path, content_type, datetime.now(timezone.utc))
+    req = urllib.request.Request(f"https://{host}{urllib.parse.quote(path, safe='/~')}", data=data, method="PUT", headers=headers)
+    try:
+        urllib.request.urlopen(req, timeout=120, context=CTX).close()
+    except urllib.error.HTTPError as e:
+        body = e.read()[:300].decode("utf-8", "replace")
+        hint = " Проверь имя бакета, регион и права TOSFullAccess." if e.code in (403, 404) else ""
+        raise AssetError(f"TOS PutObject: HTTP {e.code} {body}{hint}")
+
+
+def tos_delete(c, key):
+    host = f"{c['bucket']}.{c['tos']}"
+    path = "/" + key
+    headers = tos_request_headers(c["ak"], c["sk"], c["region"], "DELETE", host, path, "", datetime.now(timezone.utc))
+    try:
+        urllib.request.urlopen(urllib.request.Request(f"https://{host}{urllib.parse.quote(path, safe='/~')}", method="DELETE", headers=headers), timeout=30, context=CTX).close()
+    except Exception:
+        pass
+
+
+def ensure_group(c):
+    cache_key = (c["ak"], c["project"], c["group"])
+    if cache_key in _groups:
+        return _groups[cache_key]
+    res = openapi_call(c, "ListAssetGroups", {"Filter": {"Name": c["group"], "GroupType": "AIGC"}, "MaxResults": 50, "ProjectName": c["project"]})
+    gid = next((str(g.get("Id")) for g in res.get("Items") or [] if g.get("Name") == c["group"] and g.get("Id")), "")
+    if not gid:
+        gid = str(openapi_call(c, "CreateAssetGroup", {"Name": c["group"], "Description": "AI-generated frames from Video Projects", "GroupType": "AIGC", "ProjectName": c["project"]}).get("Id") or "")
+    if not gid:
+        raise AssetError("Не удалось создать группу портретов.")
+    _groups[cache_key] = gid
+    return gid
+
+
+def register_asset(body):
+    c = asset_cfg(body)
+    raw = base64.b64decode(body.get("image") or "", validate=False)
+    if not raw:
+        raise AssetError("Пустая картинка.")
+    mime = body.get("mime") or "image/jpeg"
+    ext = {"image/png": "png", "image/webp": "webp"}.get(mime, "jpg")
+    gid = ensure_group(c)
+    key = f"video-projects/{uuid.uuid4().hex}.{ext}"
+    tos_put(c, key, raw, mime)
+    try:
+        url = tos_presign_get(c["ak"], c["sk"], c["region"], f"{c['bucket']}.{c['tos']}", "/" + key, 3600, datetime.now(timezone.utc))
+        with _asset_lock:  # CreateAsset: 3 calls per minute on the Entry tier
+            wait = _last_create[0] + 21 - time.time()
+            if wait > 0:
+                time.sleep(wait)
+            _last_create[0] = time.time()
+            aid = str(openapi_call(c, "CreateAsset", {"GroupId": gid, "URL": url, "AssetType": "Image",
+                                                      "Name": (body.get("name") or "frame")[:60], "ProjectName": c["project"]}).get("Id") or "")
+        if not aid:
+            raise AssetError("CreateAsset не вернул ID.")
+        deadline = time.time() + 180
+        status = ""
+        while time.time() < deadline:
+            info = openapi_call(c, "GetAsset", {"Id": aid, "ProjectName": c["project"]})
+            status = str(info.get("Status") or "")
+            if status == "Active":
+                return {"assetId": aid, "status": status, "groupId": gid}
+            if status == "Failed":
+                raise AssetError("BytePlus не принял картинку как AI-портрет (Failed). " + json.dumps(info.get("Moderation") or {}, ensure_ascii=False)[:300])
+            time.sleep(3)
+        raise AssetError(f"Портрет не стал активным за 3 минуты (статус {status or 'неизвестен'}). ID: {aid}")
+    finally:
+        tos_delete(c, key)
+
+
+def check_assets(body):
+    c = asset_cfg(body)
+    out = {}
+    try:
+        openapi_call(c, "ListAssetGroups", {"Filter": {"GroupType": "AIGC"}, "MaxResults": 10, "ProjectName": c["project"]})
+        out["ark"] = "ok"
+    except AssetError as e:
+        out["ark"] = str(e)
+    key = f"video-projects/check-{uuid.uuid4().hex}.txt"
+    try:
+        tos_put(c, key, b"ok", "text/plain")
+        tos_delete(c, key)
+        out["tos"] = "ok"
+    except AssetError as e:
+        out["tos"] = str(e)
+    return out
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -193,6 +426,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "Bearer " + os.environ["ARK_API_KEY"] if os.environ.get("ARK_API_KEY") else None)
             tail = path.path[len("/api/ark"):]
             return self.forward(base + tail + (("?" + path.query) if path.query else ""), auth)
+        if path.path in ("/api/asset/check", "/api/asset/register", "/api/asset/delete") and self.command == "POST":
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                if path.path.endswith("/check"):
+                    return self.reply(200, check_assets(body))
+                if path.path.endswith("/register"):
+                    return self.reply(200, register_asset(body))
+                c = asset_cfg(body)
+                openapi_call(c, "DeleteAsset", {"Id": str(body.get("assetId") or ""), "ProjectName": c["project"]})
+                return self.reply(200, {"ok": True})
+            except AssetError as e:
+                return self.error(400, str(e))
+            except Exception as e:
+                return self.error(502, f"Ошибка библиотеки портретов: {e}")
         if path.path == "/api/page" and self.command == "GET":
             return self.amazon_page(urllib.parse.parse_qs(path.query).get("url", [""])[0])
         if path.path == "/api/fetch" and self.command == "GET":
