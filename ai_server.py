@@ -900,8 +900,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def main():
-    server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
     url = f"http://{HOST}:{PORT}/"
+    try:
+        server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
+    except OSError as e:
+        if e.errno not in (48, 98, 10048):  # address already in use (macOS, Linux, Windows)
+            raise
+        print(f"Порт {PORT} уже занят — AI-сервер, скорее всего, уже запущен в другом окне Терминала.")
+        print("Чтобы применить новый .env, закрой то окно (или Ctrl+C в нём) и запусти сервер снова.")
+        print(f"Остановить сервер без окна: lsof -ti tcp:{PORT} | xargs kill")
+        try:
+            input("\nНажми Enter, чтобы закрыть это окно.")
+        except EOFError:
+            pass
+        sys.exit(1)
     print(f"AI-сервер запущен: {url}")
     if ENV_LOADED:
         print(f"Из {os.path.basename(ENV_FILE)} взяты: " + ", ".join(ENV_LOADED))
