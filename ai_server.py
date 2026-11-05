@@ -1027,6 +1027,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.route()
 
     def route(self):
+        _active[0] += 1
+        try:
+            return self._route()
+        finally:
+            _active[0] -= 1
+
+    def _route(self):
         if not self.origin_ok():
             return self.error(403, "Origin not allowed")
         path = urllib.parse.urlsplit(self.path)
@@ -1039,11 +1046,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with open(os.path.join(ROOT, PAGE), "rb") as f:
                 return self.reply(200, f.read(), "text/html; charset=utf-8")
         if path.path == "/api/health":
+            maybe_pull()
             return self.reply(200, {"ok": True, "openaiKey": bool(env_key("OPENAI_API_KEY")),
                                     "arkKey": bool(env_key("ARK_API_KEY")), "geminiKey": bool(env_key("GEMINI_API_KEY")),
                                     "bpKeys": bool(env_key("BYTEPLUS_ACCESS_KEY") and env_key("BYTEPLUS_SECRET_KEY")),
                                     "tosBucket": bool(env_key("BYTEPLUS_TOS_BUCKET")), "envFile": bool(ENV_LOADED),
-                                    "codex": codex_status()})
+                                    "codex": codex_status(), "pageVersion": page_version(),
+                                    "update": _upd["note"]})
         if path.path.startswith("/api/codex/jobs/") and self.command == "GET":
             with JOBS_LOCK:
                 job = dict(JOBS.get(path.path.rsplit("/", 1)[-1]) or {})
@@ -1128,6 +1137,70 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.error(400, f"Codex: неверный запрос: {e}")
         self.reply(202, {"job": job})
 
+
+
+# --- live updates: refresh the page = newest version, no Terminal, no GitHub ---
+# While the server runs it pulls from GitHub when the page asks for /api/health (at most once a
+# minute) and every 5 minutes. A changed page is picked up by a page refresh (the page shows a
+# notice); a changed ai_server.py restarts the server itself as soon as no generation is running.
+_upd = {"last": 0.0, "busy": False, "restart": False, "note": ""}
+_upd_lock = threading.Lock()
+_active = [0]
+
+
+def git_bin():
+    return shutil.which("git") if os.path.isdir(os.path.join(ROOT, ".git")) else None
+
+
+def pull_updates():
+    git = git_bin()
+    if not git or os.environ.get("AI_NO_UPDATE"):
+        return
+    with _upd_lock:
+        if _upd["busy"]:
+            return
+        _upd.update(busy=True, last=time.time())
+    try:
+        run = lambda *a: subprocess.run([git, "-C", ROOT, *a], capture_output=True, text=True, timeout=60,
+                                        stdin=subprocess.DEVNULL)
+        before = run("rev-parse", "HEAD").stdout.strip()
+        r = run("pull", "--ff-only", "-q")
+        after = run("rev-parse", "HEAD").stdout.strip()
+        if r.returncode != 0:
+            why = (r.stderr or r.stdout).strip().splitlines()
+            _upd["note"] = "обновление не скачалось: " + (why[-1] if why else "ошибка git")
+            return
+        if after and after != before:
+            changed = run("diff", "--name-only", before, after).stdout.split()
+            subject = run("log", "-1", "--format=%s").stdout.strip()
+            print(f"Скачано обновление: {subject} — обнови страницу (⌘R).")
+            _upd["note"] = ""
+            if "ai_server.py" in changed:
+                _upd["restart"] = True
+                print("  обновился и сам AI-сервер — перезапущу его, как только не будет генераций.")
+    except Exception as e:
+        _upd["note"] = f"обновление не скачалось: {e}"
+    finally:
+        _upd["busy"] = False
+
+
+def maybe_pull(min_gap=60):
+    if time.time() - _upd["last"] > min_gap:
+        threading.Thread(target=pull_updates, daemon=True).start()
+
+
+def updater_loop():
+    while True:
+        time.sleep(30)
+        maybe_pull(300)
+        if _upd["restart"]:
+            with JOBS_LOCK:
+                running = any(j.get("status") == "running" for j in JOBS.values())
+            if not running and _active[0] <= 1:
+                print("Перезапускаю AI-сервер с новой версией…")
+                sys.stdout.flush()
+                os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)]
+                         + [a for a in sys.argv[1:] if a != "--no-update"] + ["--no-update"])
 
 
 def self_update():
@@ -1231,6 +1304,9 @@ def main():
     if EXTRA_ORIGINS:
         print("Разрешённые адреса страницы: " + ", ".join(sorted(EXTRA_ORIGINS)))
     print("Оставь это окно открытым, пока генерируешь кадры и видео. Остановить: Ctrl+C.")
+    if git_bin():
+        print("Обновления скачиваются сами: обнови страницу (⌘R), когда она об этом скажет.")
+        threading.Thread(target=updater_loop, daemon=True).start()
     if "--open" in sys.argv:
         webbrowser.open(url + PAGE)
     try:
