@@ -72,6 +72,14 @@
 .pif{font-size:12.5px;padding:2px 2px 0}
 .upload-own{align-self:flex-start}
 .seg-toggle{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--line);border-radius:8px;padding:2px;background:#f4f6f1;gap:2px}.seg-toggle button{border:0;border-radius:6px;background:none;padding:5px 10px;font-size:12px;color:var(--muted)}.seg-toggle button.on{background:#fff;color:var(--ink);font-weight:650;box-shadow:0 1px 3px #12251822}.seg-toggle button:disabled{opacity:.5}
+.media img{cursor:zoom-in}
+.lightbox{position:fixed;inset:0;z-index:1000;background:rgba(10,14,12,.92);display:flex;flex-direction:column}
+.lightbox[hidden]{display:none}
+.lb-stage{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:16px}
+.lb-stage img{max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in;box-shadow:0 8px 40px #0008}
+.lb-stage.zoom{display:block}.lb-stage.zoom img{max-width:none;max-height:none;cursor:zoom-out;margin:auto;display:block}
+.lb-close{position:absolute;top:12px;right:16px;z-index:2;width:44px;height:44px;border:0;border-radius:22px;background:#fff;color:#122518;font-size:28px;line-height:1;cursor:pointer}
+.lb-hint{margin:0;padding:8px 16px 14px;text-align:center;color:#d8e0da;font-size:12px}
 .dist-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dist-label{font-size:12px;color:var(--muted)}.scene-prop{margin:6px 0 0;font-size:12px;line-height:1.35;color:var(--muted)}
 .logo-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:14px;align-items:start}.logo-drop{min-height:96px}.logo-slogan label{font-size:12px}
 .logo-drop .thumb img{object-fit:contain;background:repeating-conic-gradient(#eee 0 25%,#fff 0 50%) 0 0/14px 14px}
@@ -296,7 +304,7 @@ select{appearance:none;-webkit-appearance:none;background:#fff url("data:image/s
 <details class="help"><summary>Сохранение, импорт и работа с проектами</summary><p><strong>Сохранить ролик .json</strong> — переносимый файл с текстами, выделениями, длительностями и настройками его проекта. <strong>Сохранить все проекты</strong> — резервная копия всей библиотеки, включая NXA, POE и новые проекты.</p><p><strong>Импорт JSON / DRT / TXT</strong> открывает черновики v2–v5, планы сцен и резервные копии v5. Импорт добавляет ролики, не перезаписывая существующие. TXT загружается отдельным роликом с сохранением звёздочек, без принудительного автоподбора.</p><p><strong>Импорт DRT в это приложение</strong> поддерживает только совместимые титры NXA с 25 fps, включая файлы, созданные редактором. Восстанавливаются тексты, диапазоны выделений, шрифт, цвета и длительности. Длительности становятся ручными; кнопка «Авто» возвращает расчёт. Цвета выделений при новом экспорте назначаются по порядку фраз: первое и второе; пустой первый диапазон исходника не сохраняется. Видео, музыка, другие эффекты, произвольные шаблоны, зазоры и наложения титров не восстанавливаются. Для полного переноса внутри редактора надёжнее JSON.</p><p><strong>Экспорт .drt</strong> подготавливает файл. В отдельном окне браузера выбери «Сохранить файл…» (если поддерживается браузером) или «Скачать .drt». Встроенный предпросмотр для скачивания не используется. Сообщение «Файл сохранён» выводится только после подтверждённой записи через диалог сохранения. Обычное скачивание не даёт странице такого подтверждения.</p><p><strong>Импорт DRT в DaVinci</strong> — отдельное действие в Resolve: <strong>File → Import → Timeline</strong>. Эта HTML-страница не открывает Resolve и не импортирует туда автоматически.</p><p>Настройки профиля применяются при новом экспорте его роликов. Ранее сохранённые .drt не меняются. Другой шрифт можно использовать на основе NXA; другой тип титра, тень или анимация требуют адаптера по образцу .drt. Профиль POE сейчас хранит пожелания, но не выдаёт приблизительный NXA-титр за готовый POE.</p><p>Автосохранение хранится в браузере, не в HTML-файле. Очистка данных, другой браузер или новое имя HTML могут его сбросить. Перед переходом на новую версию сохрани JSON и импортируй его в новую страницу.</p></details>
 <details class="help"><summary>Как работают выделения и длительности</summary><p>Кнопка «Подобрать выделения» читает актуальный текст. Результат появляется рядом с ней. Если те же слова уже выделены, об этом явно написано; повторное нажатие не генерирует случайный новый вариант. Если правила не нашли фразу, существующие выделения не удаляются.</p><p>Можно поставить <code>*звёздочки*</code> вручную или выделить слова мышкой в поле и нажать «Выделить выбранное». Старые <code>**двойные звёздочки**</code> также поддерживаются.</p><p>Подбор ориентирован на твои примеры: полное название товара во вступлении, затем польза и целые фразы; две характеристики выделяются, когда образуют смысловую пару. Это набор правил, не обученная модель. Он не понимает все товары и языки.</p><p><code>секунды = max(2,52; 0,309826 + 0,051692 × символы)</code>, затем выбранный запас и округление до кадра при 25 fps. Это оценка по семи NXA-титрам. Для POE пока используется тот же темп, не отдельная калибровка. От 1 до 100 сцен; до 600 символов в одном экспортируемом титре.</p><p>Название ролика становится названием .drt и таймлайна. Проект в библиотеке самого Resolve приложение не переименовывает. Размер шрифта не уменьшается автоматически, длинные строки нужно проверить в Resolve.</p><div class="button-row"><button type="button" id="planExport" class="small">Сохранить план сцен .json</button><button type="button" id="saveText" class="small">Сохранить скрипт .txt</button></div></details>
 <p class="legal">v6.0 · 1920 × 1080 · 25 fps · старт 01:00:00:00. Предпросмотр условный, шрифты не встроены. Новые параметры и импорт .drt требуют просмотра в Resolve. Сетевые запросы — только к OpenAI и Seedance по кнопкам «Начать» и генерации в сценах; ключи хранятся в этом браузере. Нет установки агента или доступа к экрану. Встроенная копия исходного шаблона содержит частные названия и пути: не публикуй этот HTML как обезличенный файл.</p>
-</div><div id="tabSettings" hidden><div class="mainhead"><div><h1>Настройки <span class="badge">версия 9.0</span></h1><p>Всё сохраняется сразу и только в этом браузере. Ключи не попадают в JSON, перенос и .drt. Ключи из файла <code>.env</code> рядом с ai_server.py берутся автоматически, и их поля скрываются.</p></div></div><div class="settings-layout"><nav class="settings-nav" id="settingsNav" aria-label="Разделы настроек"></nav><div class="settings-body">
+</div><div id="tabSettings" hidden><div class="mainhead"><div><h1>Настройки <span class="badge">версия 9.1</span></h1><p>Всё сохраняется сразу и только в этом браузере. Ключи не попадают в JSON, перенос и .drt. Ключи из файла <code>.env</code> рядом с ai_server.py берутся автоматически, и их поля скрываются.</p></div></div><div class="settings-layout"><nav class="settings-nav" id="settingsNav" aria-label="Разделы настроек"></nav><div class="settings-body">
 <section class="panel"><div class="ai-grid">
 <h3 class="wide">OpenAI · картинки и анализ фото</h3>
 <div class="wide"><label for="aiOpenaiVia">Как работать с ChatGPT / OpenAI</label><select id="aiOpenaiVia"><option value="auto">Авто — Codex, если AI-сервер запущен, иначе API-ключ</option><option value="api">API-ключ OpenAI — оплата по токенам</option><option value="codex">Codex — подписка ChatGPT, без ключа</option></select><p class="muted" id="aiOpenaiInfo"></p></div>
@@ -381,6 +389,7 @@ select{appearance:none;-webkit-appearance:none;background:#fff url("data:image/s
 <h3 class="wide">Сброс</h3><div class="wide"><p class="muted">Все ключи, модели и параметры сохраняются сразу при изменении и подставляются при следующем открытии этой страницы в этом браузере.</p><div class="button-row"><button type="button" class="small" id="aiResetSettings">Сбросить настройки</button></div></div>
 </div></section></div></div></div>
 </main></div>
+<div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Картинка крупно"><button type="button" class="lb-close" id="lbClose" aria-label="Закрыть">×</button><div class="lb-stage" id="lbStage"><img id="lbImg" alt=""></div><p class="lb-hint">Щёлкни по картинке — увеличить до 100% и двигать; ещё раз — вписать в экран. Esc — закрыть.</p></div>
 <aside id="resolveHelp" class="panel helpbox" role="region" aria-labelledby="filePanelTitle" hidden>
 <button type="button" id="closeResolveHelp" class="small close-file" aria-label="Закрыть окно файла">×</button>
 <h3 id="filePanelTitle" tabindex="-1">Экспорт файла</h3>
@@ -1271,6 +1280,16 @@ $('exportFull').addEventListener('click',async()=>{
  }catch(e){setStatus(e.message,true);}
  finally{busy=false;refreshSummary();}
 });
+// Picture viewer: click a scene picture to see it on the whole screen, click again for 100%.
+function openLightbox(src,alt){const lb=$('lightbox'),st=$('lbStage'),im=$('lbImg');im.src=src;im.alt=alt||'';st.classList.remove('zoom');lb.hidden=false;document.body.style.overflow='hidden';$('lbClose').focus({preventScroll:true});}
+function closeLightbox(){const lb=$('lightbox');if(lb.hidden)return;lb.hidden=true;document.body.style.overflow='';$('lbImg').removeAttribute('src');}
+$('cards').addEventListener('click',e=>{const im=e.target.closest('.media img');if(!im||!im.src)return;e.preventDefault();openLightbox(im.src,im.alt);});
+$('lbImg').addEventListener('click',e=>{e.stopPropagation();const st=$('lbStage'),im=$('lbImg'),on=!st.classList.contains('zoom');
+ const rx=e.offsetX/im.clientWidth,ry=e.offsetY/im.clientHeight;st.classList.toggle('zoom',on);
+ if(on){st.scrollLeft=Math.max(0,rx*im.naturalWidth-st.clientWidth/2);st.scrollTop=Math.max(0,ry*im.naturalHeight-st.clientHeight/2);}});
+$('lbStage').addEventListener('click',e=>{if(e.target===e.currentTarget)closeLightbox();});
+$('lbClose').addEventListener('click',closeLightbox);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();});
 $('closeResolveHelp').addEventListener('click',()=>{$('resolveHelp').hidden=true;});
 $('showLastFile').addEventListener('click',()=>renderPreparedFile());
 $('downloadReady').addEventListener('click',e=>{
@@ -1461,7 +1480,7 @@ function normalizeAIBase(a){
  const str=(v,m)=>typeof v==='string'&&v.length<=m?v:'',bool=v=>v===true||v===false?v:null;
  return {uid:mediaId(a.uid)||uuid(),shot:str(a.shot,2000),planPeople:bool(a.planPeople),usesUnknown:a.usesUnknown===true,productInFrame:a.productInFrame!==false,productManual:a.productManual===true,distance:['none','close','medium','far'].includes(a.distance)?a.distance:'',property:str(a.property,600),howShown:str(a.howShown,800),env:Array.isArray(a.env)?a.env.map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=10).slice(0,2):[],envPlanned:a.envPlanned===true,prodPhotos:Array.isArray(a.prodPhotos)?a.prodPhotos.map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=10).slice(0,3):[],prodOk:a.prodOk===true||a.prodOk===false?a.prodOk:null,prodDiff:str(a.prodDiff,1500),prodFor:mediaId(a.prodFor),people:bool(a.people),imgPrompt:str(a.imgPrompt,8000),vidPrompt:str(a.vidPrompt,8000),
   image:mediaId(a.image),video:mediaId(a.video),videoUrl:/^https:\/\//.test(a.videoUrl||'')?str(a.videoUrl,4000):'',task:mediaId(a.task),vidModel:str(a.vidModel,120),vidRes:str(a.vidRes,10),vidRatio:str(a.vidRatio,10),vidDur:Number.isFinite(a.vidDur)?a.vidDur:0,
-  vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true,vidAudio:a.vidAudio===true,location:str(a.location,600),framing:str(a.framing,40),feeling:str(a.feeling,600),describeOnce:mediaId(a.describeOnce),imgVia:str(a.imgVia,20),imgModel:str(a.imgModel,80),imgCost:Number.isFinite(a.imgCost)?a.imgCost:null,imgTokens:Number.isFinite(a.imgTokens)?a.imgTokens:null,vmode:['reference','first_frame'].includes(a.vmode)?a.vmode:'',vidMode:['reference','first_frame'].includes(a.vidMode)?a.vidMode:'',assetId:mediaId(a.assetId),assetFor:mediaId(a.assetFor),assetManual:a.assetManual===true,imgDescV:Number.isFinite(a.imgDescV)?a.imgDescV:0,imgProd:str(a.imgProd,1600),imgDesc:str(a.imgDesc,2600),imgDescFor:mediaId(a.imgDescFor),vfeedback:str(a.vfeedback,1000),vnote:str(a.vnote,1000),regen:a.regen===true,feedback:str(a.feedback,1000),note:str(a.note,1000)};
+  vidTokens:Number.isFinite(a.vidTokens)&&a.vidTokens>=0?a.vidTokens:null,vidCost:Number.isFinite(a.vidCost)&&a.vidCost>=0?a.vidCost:null,vidEst:a.vidEst===true,vidAudio:a.vidAudio===true,location:str(a.location,600),framing:str(a.framing,40),feeling:str(a.feeling,600),describeOnce:mediaId(a.describeOnce),imgVia:str(a.imgVia,20),imgModel:str(a.imgModel,80),imgCost:Number.isFinite(a.imgCost)?a.imgCost:null,imgTokens:Number.isFinite(a.imgTokens)?a.imgTokens:null,vmode:['reference','first_frame'].includes(a.vmode)?a.vmode:'',vidMode:['reference','first_frame'].includes(a.vidMode)?a.vidMode:'',assetId:mediaId(a.assetId),assetFor:mediaId(a.assetFor),assetManual:a.assetManual===true,imgDescV:Number.isFinite(a.imgDescV)?a.imgDescV:0,imgProd:str(a.imgProd,1600),imgDesc:str(a.imgDesc,2600),imgDescFor:mediaId(a.imgDescFor),vfeedback:str(a.vfeedback,1000),vnote:str(a.vnote,1000),regen:a.regen===true,feedback:/^Товар не совпадает с фото продукта:/.test(a.feedback||'')?'':str(a.feedback,1000),note:str(a.note,1000)};
 }
 function pickVersion(a){const o={};for(const k of VERSION_FIELDS)o[k]=a[k];return o;}
 function normalizeAI(a){
@@ -1871,8 +1890,8 @@ async function checkProduct(uid,key){
   const ok=r.same_product||r.product_visible===false||!diff;
   patchAI(uid,{prodOk:ok,prodDiff:ok?'':diff,prodFor:key});
   if(ok)return;
-  if(!String(cur.ai?.feedback||'').trim())patchAI(uid,{feedback:'Товар не совпадает с фото продукта: '+diff+'. Замени товар в кадре на товар с фото продукта 1 как есть — будто вырезан из этого фото, не перерисован: та же форма, детали, цвета, логотип и надписи. Всё остальное в кадре оставь как есть.'});
-  setMsg(uid,'img','error','Товар на картинке отличается от фото: '+diff+'. Исправление уже вписано в «Что изменить» — нажми кнопку под полем (≈ одна картинка). Видео по этой картинке лучше не делать.');
+  // Only shown under the picture (asked by the user): the note never goes into «Что изменить» or the prompt.
+  aiMsg.delete(uid+':img');refreshAI(uid);
  }catch{}
 }
 async function detectPeople(uid,key){
@@ -2282,6 +2301,7 @@ function imgState(s){
  const a=s.ai||{},m=aiMsg.get(a.uid+':img');
  if(imgBusy.has(a.uid))return {state:'run',text:m?.text||'Генерация…'};
  if(m?.state==='error')return m;
+ if(a.image&&a.prodOk===false&&a.prodFor===a.image&&a.prodDiff)return {state:'done',warn:true,text:'Товар на картинке отличается от фото: '+a.prodDiff+'. Можно нажать «Сгенерировать заново»; видео по этой картинке лучше не делать.'};
  if(a.image)return {state:'done',text:m?.state==='done'?m.text:''};
  return m||{state:'wait',text:'Картинка появится после «Начать».'};
 }
@@ -2298,7 +2318,7 @@ async function fillAI(s,card){
  const a=s.ai||{},u=a.uid,t=textState(s),im=imgState(s),vm=vidState(s);
  setPill(card.querySelector('[data-pill="text"]'),t.state,t.label);
  setPill(card.querySelector('[data-pill="img"]'),im.state);setPill(card.querySelector('[data-pill="vid"]'),vm.state);
- for(const [k,m] of [['img',im],['vid',vm]]){const p=card.querySelector('[data-msg="'+k+'"]');p.textContent=m.text||'';p.title=m.text||'';p.classList.toggle('error',m.state==='error');}
+ for(const [k,m] of [['img',im],['vid',vm]]){const p=card.querySelector('[data-msg="'+k+'"]');p.textContent=m.text||'';p.title=m.text||'';p.classList.toggle('error',m.state==='error'||!!m.warn);}
  const bi=card.querySelector('[data-ai-action="image"]'),bv=card.querySelector('[data-ai-action="video"]'),busyI=imgBusy.has(u),busyV=vidBusy.has(u)||!!a.task;
  bi.disabled=busyI;bi.textContent=busyI?'Генерация…':a.image?'Сгенерировать заново':'Сгенерировать картинку';
  const vbox=card.querySelector('[data-versions]'),hn=(a.history||[]).length,hi=a.hIndex??0,lockV=busyI||busyV;
