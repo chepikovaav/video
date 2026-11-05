@@ -1065,6 +1065,8 @@ DRT_NS = "ListMgt::"
 END_SCALE = 0.34      # end logo size in the reference timeline (Edit zoom)
 WIPE_FRAMES = 24      # Checker Wipe into the end card, centred on the last cut
 WM_FADE = 6           # watermark fade before the end card covers it
+PULSE_FRAMES = 12     # end logo «thump» like a cone on a subwoofer: every 0.5 s (120 BPM at 24 fps)…
+PULSE_AMOUNT = 0.018  # …up by 1.8 % in two frames, then a quick fall back
 
 
 def page_template():
@@ -1119,7 +1121,7 @@ def drt_fresh(elem):
     return ET.fromstring(s)
 
 
-def build_look_drt(page_drt, *, start, total, end_frames, with_watermark, with_end):
+def build_look_drt(page_drt, *, start, total, end_frames, with_watermark, with_end, wipe_shift=0):
     """Titles .drt from the page + adjustment clip, watermark and end card from the reference timeline."""
     meta, tpl = page_template()
     z = zipfile.ZipFile(io.BytesIO(page_drt))
@@ -1139,14 +1141,14 @@ def build_look_drt(page_drt, *, start, total, end_frames, with_watermark, with_e
     def put(track, item):
         ET.SubElement(drt_kid(track, "Items"), "Element").append(item)
 
-    end_start = start + total - WIPE_FRAMES // 2
+    end_start = start + total - WIPE_FRAMES // 2 - wipe_shift  # earlier if the last video can't run on under the wipe
     full_end = end_start + end_frames if with_end else start + total
     a = drt_fresh(adj)
     drt_set(a, "Start", start); drt_set(a, "Duration", full_end - start)
     put(v[1], a)
     if with_end and drt_items(v[2]):
-        f = drt_fresh(title_fade)
-        drt_set(f, "Start", end_start); drt_set(f, "Duration", WIPE_FRAMES // 2)
+        f = drt_fresh(title_fade)   # ends exactly with the last title
+        drt_set(f, "Start", start + total - WIPE_FRAMES // 2); drt_set(f, "Duration", WIPE_FRAMES // 2)
         put(v[2], f)
     if with_watermark:
         wm_end = end_start + WIPE_FRAMES if with_end else start + total
@@ -1182,6 +1184,18 @@ def build_look_drt(page_drt, *, start, total, end_frames, with_watermark, with_e
         for n, b in files.items():
             zo.writestr(n, b)
     return out.getvalue(), drt_kid(wm, "Name").text, drt_kid(logo, "Name").text
+
+
+def mp4_seconds(data):
+    """Duration from the movie header (mvhd) of an MP4/MOV, or None."""
+    i = data.find(b"mvhd")
+    if i < 4:
+        return None
+    if data[i + 4] == 1:
+        scale, dur = struct.unpack(">IQ", data[i + 24:i + 36])
+    else:
+        scale, dur = struct.unpack(">II", data[i + 16:i + 24])
+    return dur / scale if scale else None
 
 
 def image_size(data):
@@ -1294,24 +1308,46 @@ items = mp.ImportMedia([c["path"] for c in cfg["clips"]]) or []
 by_path = {}
 for it in items:
     by_path[it.GetClipProperty("File Path")] = it
-infos, missing = [], []
-for c in cfg["clips"]:
+tl_fps = float(cfg["fps"])
+placed, missing, slowed = [], [], []
+for k, c in enumerate(cfg["clips"]):   # one by one: a slowed clip must not run into the next one
     it = by_path.get(c["path"])
     if not it:
         missing.append(os.path.basename(c["path"])); continue
-    frames = c["frames"]
+    need = c["frames"] + (c.get("extra") or 0)
+    length, src_fps = need, tl_fps
     if not c["still"]:
-        try:
-            length = int(float(it.GetClipProperty("Frames") or 0))
+        try:   # «Frames» counts the file's own frames; a 30 fps file is shorter on a 24 fps timeline
+            src_fps = float(it.GetClipProperty("FPS") or tl_fps) or tl_fps
+            length = int(float(it.GetClipProperty("Frames") or 0) * tl_fps / src_fps)
         except ValueError:
-            length = 0
-        if c.get("extra") and (not length or length >= frames + c["extra"]):
-            frames += c["extra"]
-        elif length and length < frames:
-            frames = length
-    infos.append({"mediaPoolItem": it, "startFrame": 0, "endFrame": frames - 1, "trackIndex": 1, "recordFrame": c["record"]})
-placed = mp.AppendToTimeline(infos) or []
-say(note="Видео сцен на таймлайне: %d%s" % (len(placed), (", не найдены: " + ", ".join(missing)) if missing else ""))
+            length = need
+        if c.get("extra") and 0 < length < need:
+            need = max(c["frames"], length)   # the run-on under the wipe is optional
+    take = min(need, length) if length > 0 else need
+    # startFrame/endFrame are frames of the file, the end is not included
+    src_end = take if c["still"] else min(-(-take * src_fps // tl_fps), int(float(it.GetClipProperty("Frames") or 0)) or 10 ** 9)
+    src_end = int(src_end)
+    got = mp.AppendToTimeline([{"mediaPoolItem": it, "startFrame": 0, "endFrame": src_end, "trackIndex": 1,
+                                "recordFrame": c["record"]}]) or []
+    placed += got
+    if got and take < need:   # shorter than its title: slow it down to fill the title, no black gap
+        item = got[0]
+        try:
+            item.SetProperty("RetimeProcess", r.RETIME_OPTICAL_FLOW)
+        except Exception:
+            pass
+        # ripple lengthens the clip; locked tracks (titles, look, logos) stay where they are
+        others = [(t, i) for t in ("video", "audio") for i in range(1, tl.GetTrackCount(t) + 1) if (t, i) != ("video", 1)]
+        for t, i in others:
+            tl.SetTrackLock(t, i, True)
+        item.SetSpeed({"Percentage": 100.0 * item.GetDuration() / need, "RippleTimeline": True})
+        for t, i in others:
+            tl.SetTrackLock(t, i, False)
+        slowed.append("сцена %d: %d%%" % (k + 1, round(100.0 * take / need)))
+    if got and got[0].GetDuration() != need and not c["still"]:
+        say(note="Сцена %d: клип %d кадров вместо %d" % (k + 1, got[0].GetDuration(), need))
+say(note="Видео сцен на таймлайне: %d%s%s" % (len(placed), (", не найдены: " + ", ".join(missing)) if missing else "", (", замедлены до длины титра — " + ", ".join(slowed)) if slowed else ""))
 if cfg.get("endComp"):
     ends = [it for it in (tl.GetItemListInTrack("video", 5) or []) if it.GetMediaPoolItem()]
     if ends:
@@ -1337,13 +1373,13 @@ r.OpenPage("edit")
 tl.SetCurrentTimecode(tl.GetStartTimecode())
 pm.SaveProject()
 out = render(p, cfg["folder"], cfg["outName"]) if cfg.get("render") else None
-stop(result={"project": name, "timeline": cfg["timeline"], "video": out, "scenes": len(placed), "missing": missing})
+stop(result={"project": name, "timeline": cfg["timeline"], "video": out, "scenes": len(placed), "missing": missing, "slowed": slowed})
 '''
 
 
 def end_comp_text(logo, width, height, bg):
     size = image_size(logo) or (width, height)
-    fit = min(1.0, (height * size[0]) / (size[1] * width))  # Fusion sizes are relative to the frame width
+    fit = min(width / size[0], height / size[1])  # like the Edit page: fit the frame, then zoom (Fusion scales the file's pixels)
     r, g, b = hex_rgb(bg)
     return f'''VPBackground = Background {{
 			Inputs = {{
@@ -1358,7 +1394,7 @@ def end_comp_text(logo, width, height, bg):
 		}},
 		VPPulse = Transform {{
 			Inputs = {{
-				Size = Input {{ Expression = "{END_SCALE * fit:.5f}*(1+0.035*sin(time*2*pi/48))", }},
+				Size = Input {{ Expression = "{END_SCALE * fit:.5f}*(1+{PULSE_AMOUNT}*iif(time%{PULSE_FRAMES}<2, (time%{PULSE_FRAMES})/2, (({PULSE_FRAMES}-time%{PULSE_FRAMES})/{PULSE_FRAMES - 2})^3))", }},
 				Input = Input {{ SourceOp = "MediaIn1", Source = "Output", }},
 			}},
 		}},
@@ -1480,10 +1516,17 @@ def davinci_build(fields, files, note):
             logos[key] = (path, part[1])
     end_frames = max(WIPE_FRAMES, round(float(manifest.get("endSeconds") or 3) * fps))
     with_end = "endLogo" in logos
+    wipe_shift = 0
     if with_end:
-        clips[-1]["extra"] = WIPE_FRAMES // 2  # the last scene runs on under the wipe
+        clips[-1]["extra"] = WIPE_FRAMES // 2  # the last scene runs on under the wipe…
+        last = by_field.get(str(scene_clips[-1].get("field"))) if scene_clips else None
+        secs = mp4_seconds(last[1]) if last and not clips[-1]["still"] else None
+        if secs:   # …as far as the file allows; the wipe moves earlier by the rest, so no black shows under it
+            spare = max(0, int(secs * fps + 1e-6) - clips[-1]["frames"])
+            clips[-1]["extra"] = min(WIPE_FRAMES // 2, spare)
+            wipe_shift = WIPE_FRAMES // 2 - clips[-1]["extra"]
     drt, wm_name, end_name = build_look_drt(by_field["drt"][1], start=start, total=total, end_frames=end_frames,
-                                            with_watermark="watermark" in logos, with_end=with_end)
+                                            with_watermark="watermark" in logos, with_end=with_end, wipe_shift=wipe_shift)
     drt_path = os.path.join(folder, name + ".drt")
     with open(drt_path, "wb") as f:
         f.write(drt)
