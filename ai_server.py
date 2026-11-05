@@ -1135,7 +1135,11 @@ def self_update():
 
     Skipped without git, outside a git checkout (e.g. the Ubuntu install in /opt/video),
     with --no-update / AI_NO_UPDATE, or when the pull fails (offline, local edits)."""
-    if "--no-update" in sys.argv or os.environ.get("AI_NO_UPDATE") or not os.path.isdir(os.path.join(ROOT, ".git")):
+    if "--no-update" in sys.argv or os.environ.get("AI_NO_UPDATE"):
+        return
+    if not os.path.isdir(os.path.join(ROOT, ".git")):
+        print("ВНИМАНИЕ: эта папка скачана архивом и сама не обновляется — в ней может быть старая версия.")
+        print("  Работай из папки, скачанной через git (например ~/vibe-coding/video), и запускай сервер оттуда.")
         return
     git = shutil.which("git")
     if not git:
@@ -1185,8 +1189,19 @@ def stop_old_server():
     return stopped
 
 
+def page_version():
+    try:
+        with open(os.path.join(ROOT, PAGE), encoding="utf-8", errors="replace") as f:
+            m = re.search(r"версия (\d+(?:\.\d+)*)", f.read())
+        return m.group(1) if m else "?"
+    except OSError:
+        return "?"
+
+
 def main():
     self_update()
+    print(f"Папка приложения: {ROOT} · версия {page_version()}")
+    print(f"  Открывай страницу из этой же папки: {os.path.join(ROOT, PAGE)}")
     url = f"http://{HOST}:{PORT}/"
     try:
         try:
