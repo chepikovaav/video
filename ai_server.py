@@ -9,42 +9,46 @@ see deploy/). No dependencies beyond the Python standard library.
     python3 ai_server.py            # then press «Проверить соединение» in the page
 
 Keys: a `.env` file next to this script (see .env.example) or the environment
-(OPENAI_API_KEY, ARK_API_KEY). A key from the server wins over one typed in
-the page; the page hides key fields the server already has.
+(OPENAI_API_KEY, ARK_API_KEY, GEMINI_API_KEY, BYTEPLUS_ACCESS_KEY,
+BYTEPLUS_SECRET_KEY, BYTEPLUS_TOS_BUCKET). A key on the server wins over one
+typed in the page; the page hides key fields the server already has.
 
 ChatGPT via Codex: with the Codex CLI logged in with a ChatGPT account
 (`codex login`), the page can send OpenAI work here with `X-OpenAI-Via: codex`.
-Photo analysis and scene planning run through `codex exec`, frames through
-Codex's built-in image tool. These calls take minutes, so they run as jobs:
-the request answers 202 {"job": id} and the page polls /api/codex/jobs/<id>.
+Text/vision requests run through `codex exec`, frames through Codex's built-in
+image tool. These take minutes, so they run as jobs: the request answers
+202 {"job": id} and the page polls /api/codex/jobs/<id>.
 """
 import base64
 import email.parser
 import email.policy
 import glob
+import hashlib
+import hmac
 import http.server
 import json
-import os
 import re
 import shutil
-import ssl
 import subprocess
-import sys
 import tempfile
 import threading
 import time
+import uuid
+from datetime import datetime, timezone
+import os
+import ssl
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 import webbrowser
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 def load_dotenv(path):
-    """KEY=VALUE lines; values already set in the environment win."""
-    loaded = []
+    """KEY=VALUE lines; a repeated key takes its last value; the real environment wins."""
+    values, loaded = {}, []
     try:
         with open(path, encoding="utf-8-sig") as f:
             lines = f.read().splitlines()
@@ -64,7 +68,10 @@ def load_dotenv(path):
             value = value[1:-1]
         else:
             value = value.split(" #", 1)[0].rstrip()
-        if value and not os.environ.get(key):
+        if value:
+            values[key] = value
+    for key, value in values.items():
+        if not os.environ.get(key):
             os.environ[key] = value
             loaded.append(key)
     return loaded
@@ -77,8 +84,17 @@ PORT = int(os.environ.get("AI_SERVER_PORT", "8787"))
 HOST = os.environ.get("AI_SERVER_HOST", "127.0.0.1")
 PAGE = "Video_Projects_Local.html"
 OPENAI = "https://api.openai.com/v1"
+GEMINI = "https://generativelanguage.googleapis.com"
 ARK_HOSTS = (".bytepluses.com", ".volces.com", ".byteplus.com", ".volccdn.com")
 MEDIA_HOSTS = ARK_HOSTS + (".openai.com", ".oaiusercontent.com", ".blob.core.windows.net")
+AMAZON_HOST = re.compile(r"(^|\.)amazon\.[a-z.]{2,10}$")
+AMAZON_SHORT = {"a.co", "amzn.to", "amzn.eu", "amzn.asia"}
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 # On a server behind Cloudflare: AI_ALLOWED_ORIGINS=https://video.example.com
 EXTRA_ORIGINS = {o.strip().rstrip("/") for o in os.environ.get("AI_ALLOWED_ORIGINS", "").split(",") if o.strip()}
 ALLOWED_ORIGINS = {"null", f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"} | EXTRA_ORIGINS
@@ -107,6 +123,262 @@ def host_allowed(url, suffixes):
     return p.scheme == "https" and any(host.endswith(s) for s in suffixes)
 
 
+# --- BytePlus private virtual-portrait library (AIGC assets) -----------------
+# Seedance 2.x rejects input images with realistic faces. BytePlus' documented
+# route for AI-generated people: put the image in the private asset library as
+# an AIGC "virtual portrait" and pass asset://<id> instead of the image.
+# Flow: upload to a private TOS bucket -> presigned GET URL -> CreateAsset ->
+# poll GetAsset until Active. Management calls need IAM AK/SK (V4 signatures);
+# the ModelArk API key is not accepted there.
+ARK_OPENAPI_VERSION = "2024-01-01"
+_asset_lock = threading.Lock()
+_last_create = [0.0]
+_groups = {}
+
+
+class AssetError(Exception):
+    pass
+
+
+def _hm(key, msg):
+    return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
+
+
+def _q(value, safe="-_.~"):
+    return urllib.parse.quote(str(value), safe=safe)
+
+
+def openapi_headers(ak, sk, host, region, query, body, now, service="ark", session_token=""):
+    """BytePlus OpenAPI V4 (HMAC-SHA256), same scheme as BytePlus' ark-mcp signer."""
+    date = now.strftime("%Y%m%dT%H%M%SZ")
+    short = date[:8]
+    payload_hash = hashlib.sha256(body).hexdigest()
+    hv = {"content-type": "application/json", "host": host, "x-content-sha256": payload_hash, "x-date": date}
+    if session_token:
+        hv["x-security-token"] = session_token
+    names = sorted(hv)
+    canonical = "\n".join([
+        "POST", "/", "&".join(f"{_q(k)}={_q(v)}" for k, v in sorted(query.items())),
+        "".join(f"{n}:{hv[n].strip()}\n" for n in names), ";".join(names), payload_hash])
+    scope = f"{short}/{region}/{service}/request"
+    sts = "\n".join(["HMAC-SHA256", date, scope, hashlib.sha256(canonical.encode("utf-8")).hexdigest()])
+    key = sk.encode("utf-8")
+    for part in (short, region, service, "request"):
+        key = _hm(key, part)
+    sig = hmac.new(key, sts.encode("utf-8"), hashlib.sha256).hexdigest()
+    headers = {"Host": host, "X-Date": date, "X-Content-Sha256": payload_hash, "Content-Type": "application/json",
+               "Authorization": f"HMAC-SHA256 Credential={ak}/{scope}, SignedHeaders={';'.join(names)}, Signature={sig}"}
+    if session_token:
+        headers["X-Security-Token"] = session_token
+    return headers
+
+
+def tos_signature(sk, region, date, canonical):
+    """TOS4-HMAC-SHA256, as in BytePlus' official `tos` Python SDK (auth.py)."""
+    sts = "\n".join(["TOS4-HMAC-SHA256", date, f"{date[:8]}/{region}/tos/request",
+                     hashlib.sha256(canonical.encode("utf-8")).hexdigest()])
+    key = sk.encode("utf-8")
+    for part in (date[:8], region, "tos", "request"):
+        key = _hm(key, part)
+    return hmac.new(key, sts.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def tos_request_headers(ak, sk, region, method, host, path, content_type, now):
+    date = now.strftime("%Y%m%dT%H%M%SZ")
+    hv = {"host": host, "x-tos-date": date}
+    if content_type:
+        hv["content-type"] = content_type
+    names = sorted(hv)
+    canonical = "\n".join([method, urllib.parse.quote(path, safe="/~"), "",
+                           "".join(f"{n}:{hv[n]}\n" for n in names), ";".join(names), "UNSIGNED-PAYLOAD"])
+    sig = tos_signature(sk, region, date, canonical)
+    headers = {"Host": host, "Date": date, "x-tos-date": date,
+               "Authorization": f"TOS4-HMAC-SHA256 Credential={ak}/{date[:8]}/{region}/tos/request, "
+                                f"SignedHeaders={';'.join(names)}, Signature={sig}"}
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
+
+
+def tos_presign_get(ak, sk, region, host, path, expires, now):
+    date = now.strftime("%Y%m%dT%H%M%SZ")
+    params = {"X-Tos-Algorithm": "TOS4-HMAC-SHA256", "X-Tos-Credential": f"{ak}/{date[:8]}/{region}/tos/request",
+              "X-Tos-Date": date, "X-Tos-Expires": str(expires), "X-Tos-SignedHeaders": "host"}
+    cqs = "&".join(f"{_q(k)}={_q(v)}" for k, v in sorted(params.items()))
+    canonical = "\n".join(["GET", urllib.parse.quote(path, safe="/~"), cqs, f"host:{host}\n", "host", "UNSIGNED-PAYLOAD"])
+    params["X-Tos-Signature"] = tos_signature(sk, region, date, canonical)
+    return f"https://{host}{urllib.parse.quote(path, safe='/~')}?" + "&".join(
+        f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(v, safe='')}" for k, v in params.items())
+
+
+def asset_cfg(body):
+    c = {
+        "ak": (env_key("BYTEPLUS_ACCESS_KEY") or body.get("ak") or "").strip(),
+        "sk": (env_key("BYTEPLUS_SECRET_KEY") or body.get("sk") or "").strip(),
+        "bucket": (env_key("BYTEPLUS_TOS_BUCKET") or body.get("bucket") or "").strip(),
+        "region": (body.get("region") or "ap-southeast-1").strip(),
+        "tos": (body.get("tosEndpoint") or "tos-ap-southeast-1.bytepluses.com").strip().replace("https://", "").rstrip("/"),
+        "ark": (body.get("arkHost") or "ark.ap-southeast-1.byteplusapi.com").strip().replace("https://", "").rstrip("/"),
+        "project": (body.get("project") or "default").strip(),
+        "group": (body.get("group") or "video-projects-aigc").strip()[:60],
+    }
+    if not c["ak"] or not c["sk"]:
+        raise AssetError("Нет Access Key / Secret Key BytePlus. Укажи их в настройках приложения.")
+    if c["bucket"] and not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", c["bucket"]):
+        raise AssetError("Имя бакета TOS: только строчные латинские буквы, цифры и дефисы. Без бакета оставь поле пустым.")
+    for host in (c["tos"], c["ark"]):
+        if not re.fullmatch(r"[a-z0-9.-]+\.(bytepluses|byteplusapi|volces|volcengineapi)\.com", host):
+            raise AssetError("Неизвестный адрес BytePlus: " + host)
+    return c
+
+
+def openapi_call(c, action, body):
+    payload = json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    query = {"Action": action, "Version": ARK_OPENAPI_VERSION}
+    headers = openapi_headers(c["ak"], c["sk"], c["ark"], c["region"], query, payload, datetime.now(timezone.utc))
+    url = f"https://{c['ark']}/?" + "&".join(f"{_q(k)}={_q(v)}" for k, v in sorted(query.items()))
+    req = urllib.request.Request(url, data=payload, method="POST", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=60, context=CTX) as r:
+            data = json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            data = json.loads(e.read() or b"{}")
+        except Exception:
+            raise AssetError(f"{action}: HTTP {e.code}")
+    err = (data.get("ResponseMetadata") or {}).get("Error")
+    if err:
+        code, msg = err.get("Code", ""), err.get("Message", "")
+        hint = ""
+        if "AccessKey" in code or "Signature" in code or "SecretToken" in code:
+            hint = " Проверь Access Key и Secret Key."
+        elif "AccessDenied" in code or "Forbidden" in code or "NoPermission" in code:
+            hint = " У пользователя IAM нет прав: добавь политику ArkFullAccess."
+        raise AssetError(f"{action}: {code} {msg}".strip() + hint)
+    return data.get("Result") or {}
+
+
+def tos_put(c, key, data, content_type):
+    host = f"{c['bucket']}.{c['tos']}"
+    path = "/" + key
+    headers = tos_request_headers(c["ak"], c["sk"], c["region"], "PUT", host, path, content_type, datetime.now(timezone.utc))
+    req = urllib.request.Request(f"https://{host}{urllib.parse.quote(path, safe='/~')}", data=data, method="PUT", headers=headers)
+    try:
+        urllib.request.urlopen(req, timeout=120, context=CTX).close()
+    except urllib.error.HTTPError as e:
+        body = e.read()[:300].decode("utf-8", "replace")
+        hint = " Проверь имя бакета, регион и права TOSFullAccess." if e.code in (403, 404) else ""
+        raise AssetError(f"TOS PutObject: HTTP {e.code} {body}{hint}")
+
+
+def tos_delete(c, key):
+    host = f"{c['bucket']}.{c['tos']}"
+    path = "/" + key
+    headers = tos_request_headers(c["ak"], c["sk"], c["region"], "DELETE", host, path, "", datetime.now(timezone.utc))
+    try:
+        urllib.request.urlopen(urllib.request.Request(f"https://{host}{urllib.parse.quote(path, safe='/~')}", method="DELETE", headers=headers), timeout=30, context=CTX).close()
+    except Exception:
+        pass
+
+
+def ensure_group(c):
+    cache_key = (c["ak"], c["project"], c["group"])
+    if cache_key in _groups:
+        return _groups[cache_key]
+    res = openapi_call(c, "ListAssetGroups", {"Filter": {"Name": c["group"], "GroupType": "AIGC"}, "MaxResults": 50, "ProjectName": c["project"]})
+    gid = next((str(g.get("Id")) for g in res.get("Items") or [] if g.get("Name") == c["group"] and g.get("Id")), "")
+    if not gid:
+        gid = str(openapi_call(c, "CreateAssetGroup", {"Name": c["group"], "Description": "AI-generated frames from Video Projects", "GroupType": "AIGC", "ProjectName": c["project"]}).get("Id") or "")
+    if not gid:
+        raise AssetError("Не удалось создать группу портретов.")
+    _groups[cache_key] = gid
+    return gid
+
+
+def create_and_wait(c, gid, url, name):
+    with _asset_lock:  # CreateAsset: 3 calls per minute on the Entry tier
+        wait = _last_create[0] + 21 - time.time()
+        if wait > 0:
+            time.sleep(wait)
+        _last_create[0] = time.time()
+        aid = str(openapi_call(c, "CreateAsset", {"GroupId": gid, "URL": url, "AssetType": "Image",
+                                                  "Name": (name or "frame")[:60], "ProjectName": c["project"]}).get("Id") or "")
+    if not aid:
+        raise AssetError("CreateAsset не вернул ID.")
+    deadline = time.time() + 180
+    status = ""
+    while time.time() < deadline:
+        info = openapi_call(c, "GetAsset", {"Id": aid, "ProjectName": c["project"]})
+        status = str(info.get("Status") or "")
+        if status == "Active":
+            return aid
+        if status == "Failed":
+            raise AssetError("BytePlus не принял картинку как AI-портрет (Failed). " + json.dumps(info.get("Moderation") or info.get("Error") or {}, ensure_ascii=False)[:300])
+        time.sleep(3)
+    raise AssetError(f"Портрет не стал активным за 3 минуты (статус {status or 'неизвестен'}). ID: {aid}")
+
+
+def register_asset(body):
+    """Without a bucket the image goes inline as a data: URL (TOS needs enterprise
+    certification on personal accounts); with a bucket — via a presigned TOS link."""
+    c = asset_cfg(body)
+    b64 = (body.get("image") or "").strip()
+    raw = base64.b64decode(b64, validate=False)
+    if not raw:
+        raise AssetError("Пустая картинка.")
+    mime = body.get("mime") or "image/jpeg"
+    gid = ensure_group(c)
+    if not c["bucket"]:
+        try:
+            aid = create_and_wait(c, gid, f"data:{mime};base64,{b64}", body.get("name"))
+        except AssetError as e:
+            if re.search(r"URL|InvalidParameter|scheme|protocol", str(e), re.I):
+                raise AssetError("BytePlus не принимает картинку без ссылки (" + str(e)[:200] + "). Загрузи кадр в консоли вручную и впиши Asset ID в сцене, или подключи бакет.")
+            raise
+        return {"assetId": aid, "status": "Active", "groupId": gid, "via": "inline"}
+    ext = {"image/png": "png", "image/webp": "webp"}.get(mime, "jpg")
+    key = f"video-projects/{uuid.uuid4().hex}.{ext}"
+    tos_put(c, key, raw, mime)
+    try:
+        url = tos_presign_get(c["ak"], c["sk"], c["region"], f"{c['bucket']}.{c['tos']}", "/" + key, 3600, datetime.now(timezone.utc))
+        return {"assetId": create_and_wait(c, gid, url, body.get("name")), "status": "Active", "groupId": gid, "via": "tos"}
+    finally:
+        tos_delete(c, key)
+
+
+def check_assets(body):
+    c = asset_cfg(body)
+    out = {}
+    try:
+        openapi_call(c, "ListAssetGroups", {"Filter": {"GroupType": "AIGC"}, "MaxResults": 10, "ProjectName": c["project"]})
+        out["ark"] = "ok"
+    except AssetError as e:
+        out["ark"] = str(e)
+    if out["ark"] != "ok":
+        return out
+    if c["bucket"]:
+        key = f"video-projects/check-{uuid.uuid4().hex}.txt"
+        try:
+            tos_put(c, key, b"ok", "text/plain")
+            tos_delete(c, key)
+            out["tos"] = "ok"
+        except AssetError as e:
+            out["tos"] = str(e)
+        return out
+    # No bucket: try registering a small test picture inline, then remove it.
+    if body.get("testImage"):
+        try:
+            res = register_asset({**body, "image": body["testImage"], "mime": "image/jpeg", "name": "connection-check"})
+            out["inline"] = "ok"
+            try:
+                openapi_call(c, "DeleteAsset", {"Id": res["assetId"], "ProjectName": c["project"]})
+            except AssetError:
+                pass
+        except AssetError as e:
+            out["inline"] = str(e)
+    return out
+
+
 # ---------------------------------------------------------------- Codex ----
 
 CODEX_TIMEOUT = int(os.environ.get("CODEX_TIMEOUT", "600"))
@@ -115,18 +387,25 @@ CODEX_MODEL = os.environ.get("CODEX_MODEL", "").strip()
 CODEX_SLOTS = threading.BoundedSemaphore(max(1, int(os.environ.get("CODEX_PARALLEL", "2"))))
 CODEX_HOME = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp")
+CODEX_MAX_REFS = 5
+
+
+_warned_bin = []
 
 
 def find_codex():
-    explicit = os.environ.get("CODEX_BIN", "").strip()
-    if explicit:
-        return explicit if os.path.isfile(explicit) else None
+    explicit = os.path.expanduser(os.environ.get("CODEX_BIN", "").strip())
+    if explicit and os.path.isfile(explicit):
+        return explicit
+    if explicit and not _warned_bin:
+        _warned_bin.append(explicit)
+        print(f"  CODEX_BIN={explicit}: такого файла нет, ищу Codex сам")
     found = shutil.which("codex")
     if found:
         return found
     # Finder-launched .command files often miss Homebrew / npm paths.
     home = os.path.expanduser("~")
-    candidates = ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", home + "/.local/bin/codex",
+    candidates = [home + "/.local/bin/codex", "/opt/homebrew/bin/codex", "/usr/local/bin/codex",
                   home + "/.npm-global/bin/codex", home + "/.bun/bin/codex", home + "/.volta/bin/codex"]
     candidates += sorted(glob.glob(home + "/.nvm/versions/node/*/bin/codex"), reverse=True)
     for c in candidates:
@@ -243,7 +522,7 @@ def save_data_url(url, workdir, n):
     return path
 
 
-def codex_chat(payload):
+def codex_chat(payload, want_json=True):
     """OpenAI chat.completions request (text + images) -> one `codex exec` run."""
     work = tempfile.mkdtemp(prefix="codex-chat-")
     try:
@@ -268,7 +547,7 @@ def codex_chat(payload):
         prompt = ("Работай как модель API: не запускай команды, не читай и не создавай файлы. "
                   + (f"К сообщению приложено изображений: {len(images)}, по порядку упоминания. " if images else "")
                   + "\n\n" + "\n\n".join(parts)
-                  + "\n\nОтветь только JSON-объектом, без пояснений и без ```.")
+                  + ("\n\nОтветь только JSON-объектом, без пояснений и без ```." if want_json else ""))
         answer = os.path.join(work, "answer.txt")
         args = ["-s", "read-only", "-o", answer]
         for path in images:
@@ -287,6 +566,15 @@ def codex_chat(payload):
         shutil.rmtree(work, ignore_errors=True)
 
 
+def codex_responses(payload):
+    """OpenAI responses request (plain text input) -> text answer in the responses shape."""
+    data = payload.get("input")
+    messages = [{"role": "user", "content": data}] if isinstance(data, str) else (data or [])
+    text = codex_chat({"messages": messages}, want_json=False)["choices"][0]["message"]["content"]
+    return {"object": "response", "output": [{"type": "message", "role": "assistant",
+                                              "content": [{"type": "output_text", "text": text}]}]}
+
+
 def parse_multipart(ctype, body):
     head = b"Content-Type: " + ctype.encode("latin-1") + b"\r\nMIME-Version: 1.0\r\n\r\n"
     msg = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(head + body)
@@ -295,7 +583,7 @@ def parse_multipart(ctype, body):
         name = part.get_param("name", header="content-disposition")
         data = part.get_payload(decode=True) or b""
         if part.get_filename():
-            files.append((part.get_filename(), data))
+            files.append((part.get_filename(), data, name))
         elif name:
             fields[name] = data.decode("utf-8", "replace")
     return fields, files
@@ -316,7 +604,7 @@ def codex_image(fields, refs):
     work = tempfile.mkdtemp(prefix="codex-img-")
     try:
         names = []
-        for i, (_, data) in enumerate(refs, 1):
+        for i, (_, data, *_rest) in enumerate(refs, 1):
             kind = image_kind(data)
             if not kind:
                 continue
@@ -324,20 +612,28 @@ def codex_image(fields, refs):
             with open(path, "wb") as f:
                 f.write(data)
             names.append(path)
+            if len(names) == CODEX_MAX_REFS:  # Codex's image tool takes at most 5; the page sends the most important first
+                break
         size = fields.get("size") or "1024x1536"
         try:
             w, h = (int(x) for x in size.split("x"))
             shape = "vertical" if h > w else "horizontal" if w > h else "square"
         except ValueError:
             shape = "as described"
-        prompt = ("Use your built-in image generation tool ($imagegen) exactly once to create one image. "
-                  "Do not write scripts and do not draw the image with code. "
-                  + (f"Base it on the {len(names)} attached reference image(s): pass num_last_images_to_include:{len(names)} "
-                     "in the image tool call so they reach the tool; the product must look exactly like in the references. "
-                     if names else "")
-                  + f"Image size: {size} ({shape}). "
-                  "Save the generated image as out.png in the current working directory, then reply only with the file name."
-                  "\n\nImage description:\n" + (fields.get("prompt") or ""))
+        # Codex is an agent: left alone it rewrites and shortens the prompt before calling its image
+        # tool, and the exact rules about the product's logo and inscriptions get lost. So the prompt
+        # goes in markers and must be passed on verbatim; the log below shows what really reached the tool.
+        body = (fields.get("prompt") or "").strip() + f"\nImage size: {size} ({shape})."
+        prompt = ("Use your built-in image generation tool ($imagegen) exactly once to create one image.\n"
+                  "The tool's prompt must be EXACTLY the text between <<<PROMPT and PROMPT>>> below, copied character "
+                  "for character: do not shorten, summarize, rephrase, reorder, translate or add anything — every "
+                  "sentence about the product, its logo and its inscriptions matters.\n"
+                  + (f"Pass num_last_images_to_include:{len(names)} so all {len(names)} attached images reach the tool "
+                     "in the attached order (the prompt refers to them as reference image 1, 2, …).\n" if names else "")
+                  + f"If the tool has a size or aspect setting, use {size}.\n"
+                  "Do not write scripts and do not draw the image with code. After the call, save the generated image "
+                  "as out.png in the current working directory and reply only with the file name.\n\n"
+                  "<<<PROMPT\n" + body + "\nPROMPT>>>")
         args = ["--json", "-s", "workspace-write"]
         for path in names:
             args += ["-i", path]
@@ -349,13 +645,66 @@ def codex_image(fields, refs):
         except CodexError as e:  # the picture may exist even if the turn ended badly
             error = e
         found = find_generated(work, log, started, set(names))
+        call = tool_call_info(log)
+        if call:
+            sent, n_refs = call.get("prompt", ""), call.get("refs")
+            full = sent.strip().startswith(body[:200].strip()) and len(sent) >= len(body) * 0.97
+            print(f"  Codex → картинка: промпт {'передан полностью' if full else 'ИЗМЕНЁН агентом'} "
+                  f"({len(sent)} из {len(body)} символов), референсов: {n_refs if n_refs is not None else '?'} из {len(names)}")
         if not found:
             raise error or CodexError("Codex не создал картинку: " + log_tail(log))
         with open(found, "rb") as f:
             data = f.read()
-        return {"created": int(time.time()), "data": [{"b64_json": base64.b64encode(data).decode()}]}
+        return {"created": int(time.time()), "data": [{"b64_json": base64.b64encode(data).decode()}],
+                "codex": {"toolPrompt": (call or {}).get("prompt", "")[:20000], "refsSent": len(names),
+                          "refsUsed": (call or {}).get("refs")}}
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def tool_call_info(log):
+    """What Codex really passed to its image tool, read from the session rollout (best effort)."""
+    try:
+        with open(log, encoding="utf-8", errors="replace") as f:
+            m = re.search(r'"thread_id"\s*:\s*"([^"]+)"', f.read())
+    except OSError:
+        return None
+    if not m:
+        return None
+    files = glob.glob(os.path.join(CODEX_HOME, "sessions", "**", f"*{m.group(1)}*.jsonl"), recursive=True)
+    best = None
+
+    def visit(node):
+        nonlocal best
+        if isinstance(node, dict):
+            for key in ("arguments", "input"):
+                raw = node.get(key)
+                if isinstance(raw, str) and "prompt" in raw:
+                    try:
+                        raw = json.loads(raw)
+                    except ValueError:
+                        continue
+                if isinstance(raw, dict) and isinstance(raw.get("prompt"), str):
+                    if not best or len(raw["prompt"]) > len(best["prompt"]):
+                        best = {"prompt": raw["prompt"], "refs": raw.get("num_last_images_to_include")}
+            for v in node.values():
+                visit(v)
+        elif isinstance(node, list):
+            for v in node:
+                visit(v)
+
+    for path in files[:1]:
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if '"prompt' in line:
+                        try:
+                            visit(json.loads(line))
+                        except ValueError:
+                            pass
+        except OSError:
+            pass
+    return best
 
 
 def find_generated(work, log, started, exclude):
@@ -408,6 +757,152 @@ def start_job(fn, *args):
     return job_id
 
 
+# ------------------------------------------------------------ DaVinci -----
+# A .drt keeps media as compressed binary records that can't be written blindly,
+# so the timeline with footage is built by DaVinci Resolve itself: the server saves
+# the scene videos/frames, the titles .drt and a Lua script, installs the script into
+# Resolve's Scripts menu, and the script imports the .drt and places each clip on V1.
+RESOLVE_SCRIPT_NAME = "Video Projects — собрать таймлайн.lua"
+MEDIA_EXT = {"mp4", "mov", "webm", "png", "jpg", "jpeg", "webp"}
+
+
+def export_root():
+    custom = os.environ.get("AI_EXPORT_DIR", "").strip()
+    if custom:
+        return os.path.expanduser(custom)
+    movies = os.path.expanduser("~/Movies")
+    return os.path.join(movies, "Video Projects") if os.path.isdir(movies) else os.path.join(ROOT, "export")
+
+
+def resolve_scripts_dir():
+    home = os.path.expanduser("~")
+    if sys.platform == "darwin":
+        base = os.path.join(home, "Library", "Application Support", "Blackmagic Design", "DaVinci Resolve")
+    elif os.name == "nt":
+        base = os.path.join(os.environ.get("APPDATA", home), "Blackmagic Design", "DaVinci Resolve", "Support")
+    else:
+        base = os.path.join(home, ".local", "share", "DaVinciResolve")
+    return os.path.join(base, "Fusion", "Scripts", "Utility"), os.path.isdir(os.path.dirname(base)) or os.path.isdir(base)
+
+
+def lua_str(v):
+    return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "") + '"'
+
+
+def safe_folder_name(name):
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", name or "").strip().strip(".")
+    return re.sub(r"\s+", " ", name)[:80] or "Ролик"
+
+
+def davinci_script(folder, drt, timeline, clips):
+    rows = ",\n".join("  {file=%s, record=%d, frames=%d, still=%s}" % (lua_str(c["file"]), c["record"], c["frames"],
+                                                                     "true" if c["kind"] == "image" else "false")
+                      for c in clips)
+    return f"""-- Создано Video Projects. Запуск: DaVinci Resolve → Workspace → Scripts → «Video Projects — собрать таймлайн».
+-- Импортирует таймлайн с титрами (.drt) и ставит видео сцен на дорожку V1 по разметке сцен.
+local folder = {lua_str(folder)}
+local drt = {lua_str(drt)}
+local timelineName = {lua_str(timeline)}
+local clips = {{
+{rows}
+}}
+
+local function say(t) print("[Video Projects] " .. t) end
+local resolve = resolve or (Resolve and Resolve())
+if not resolve then say("Нет связи с DaVinci Resolve.") return end
+local project = resolve:GetProjectManager():GetCurrentProject()
+if not project then say("Открой или создай проект в DaVinci Resolve и запусти скрипт ещё раз.") return end
+local mp = project:GetMediaPool()
+local bin = mp:AddSubFolder(mp:GetRootFolder(), timelineName .. " — медиа")
+if bin then mp:SetCurrentFolder(bin) end
+
+local tl = mp:ImportTimelineFromFile(drt, {{timelineName = timelineName}})
+if not tl then say("Не удалось импортировать титры: " .. drt) return end
+project:SetCurrentTimeline(tl)
+
+local paths = {{}}
+for i, c in ipairs(clips) do paths[i] = folder .. "/" .. c.file end
+local items = mp:ImportMedia(paths) or {{}}
+local byName = {{}}
+for _, it in pairs(items) do byName[it:GetClipProperty("File Name")] = it end
+
+local infos, missing = {{}}, 0
+for _, c in ipairs(clips) do
+  local it = byName[c.file]
+  if it then
+    local n = c.frames
+    if not c.still then
+      local len = tonumber(it:GetClipProperty("Frames") or "") or n
+      if len > 0 and len < n then n = len end
+    end
+    table.insert(infos, {{mediaPoolItem = it, startFrame = 0, endFrame = n - 1, trackIndex = 1, recordFrame = c.record}})
+  else
+    missing = missing + 1
+    say("Не найден файл: " .. c.file)
+  end
+end
+local placed = mp:AppendToTimeline(infos)
+local count = 0
+if placed then for _ in pairs(placed) do count = count + 1 end end
+say("Готово: таймлайн «" .. timelineName .. "», клипов на V1: " .. count .. (missing > 0 and (", не найдено файлов: " .. missing) or ""))
+"""
+
+
+def davinci_export(fields, files):
+    try:
+        manifest = json.loads(fields.get("manifest") or "{}")
+    except ValueError:
+        raise CodexError("Неверный список клипов.")
+    by_field = {name: (fname, data) for fname, data, name in files if name}
+    if "drt" not in by_field:
+        raise CodexError("Нет файла .drt с титрами.")
+    name = safe_folder_name(fields.get("name"))
+    folder = os.path.join(export_root(), name)
+    os.makedirs(folder, exist_ok=True)
+    for old in glob.glob(os.path.join(folder, "scene-*")) + glob.glob(os.path.join(folder, "end-card.*")):
+        try:
+            os.remove(old)
+        except OSError:
+            pass
+    drt_path = os.path.join(folder, name + ".drt")
+    with open(drt_path, "wb") as f:
+        f.write(by_field["drt"][1])
+    clips = []
+    for k, c in enumerate(manifest.get("clips") or []):
+        part = by_field.get(str(c.get("field")))
+        if not part:
+            continue
+        ext = (os.path.splitext(part[0])[1][1:] or "").lower()
+        if ext not in MEDIA_EXT:
+            ext = image_kind(part[1]) or "mp4"
+        kind = "image" if ext in ("png", "jpg", "jpeg", "webp") else "video"
+        base = "end-card" if c.get("field") == "mEnd" else "scene-%02d" % (int(c.get("scene") or k + 1))
+        file = f"{base}.{ext}"
+        with open(os.path.join(folder, file), "wb") as f:
+            f.write(part[1])
+        clips.append({"file": file, "record": int(c.get("record") or 0), "frames": max(1, int(c.get("frames") or 1)), "kind": kind})
+    if not clips:
+        raise CodexError("Нет ни одного видео или картинки сцен.")
+    script = davinci_script(folder.replace("\\", "/"), drt_path.replace("\\", "/"), name, clips)
+    with open(os.path.join(folder, RESOLVE_SCRIPT_NAME), "w", encoding="utf-8") as f:
+        f.write(script)
+    scripts_dir, resolve_found = resolve_scripts_dir()
+    installed = False
+    if resolve_found:
+        try:
+            os.makedirs(scripts_dir, exist_ok=True)
+            with open(os.path.join(scripts_dir, RESOLVE_SCRIPT_NAME), "w", encoding="utf-8") as f:
+                f.write(script)
+            installed = True
+        except OSError:
+            pass
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", folder], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"  DaVinci: папка {folder} · клипов {len(clips)} · скрипт " + ("в меню Resolve" if installed else "только в папке"))
+    return {"folder": folder, "clips": len(clips), "videos": sum(c["kind"] == "video" for c in clips),
+            "scriptInstalled": installed, "scriptName": RESOLVE_SCRIPT_NAME[:-4]}
+
+
 # ---------------------------------------------------------------- HTTP -----
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -433,6 +928,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.cors()
         self.send_header("Content-Type", ctype)
+        if ctype.startswith("text/html"):
+            self.send_header("Cache-Control", "no-store")  # always the newest page from this folder
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -446,15 +943,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             raise ValueError("Запрос слишком большой.")
         return self.rfile.read(length) if length else b""
 
-    def forward(self, url, auth, body=None):
-        if self.command == "POST" and body is None:
-            body = self.read_body()
+    def auth_for(self, env_name):
+        key = env_key(env_name)
+        return ("Bearer " + key) if key else self.headers.get("Authorization")
+
+    def forward(self, url, auth, extra=None):
+        body = self.read_body() if self.command == "POST" else None
         req = urllib.request.Request(url, data=body, method=self.command)
         if self.headers.get("Content-Type") and body is not None:
             req.add_header("Content-Type", self.headers["Content-Type"])
         if auth:
             req.add_header("Authorization", auth)
-        req.add_header("User-Agent", "VideoProjectsAI/1.1")
+        for k, v in (extra or {}).items():
+            if v:
+                req.add_header(k, v)
+        req.add_header("User-Agent", "VideoProjectsAI/1.0")
         try:
             resp = urllib.request.urlopen(req, timeout=TIMEOUT, context=CTX)
         except urllib.error.HTTPError as e:
@@ -481,9 +984,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     break
                 self.wfile.write(chunk)
 
-    def auth_for(self, env_name):
-        key = env_key(env_name)
-        return ("Bearer " + key) if key else self.headers.get("Authorization")
+    def amazon_page(self, url):
+        """Fetch an Amazon product page (HTML only) for the page to parse."""
+        def is_amazon(u):
+            p = urllib.parse.urlsplit(u)
+            host = (p.hostname or "").lower()
+            return p.scheme in ("http", "https") and (bool(AMAZON_HOST.search(host)) or host in AMAZON_SHORT)
+        if not is_amazon(url):
+            return self.error(400, "Нужна ссылка на страницу товара Amazon.")
+        req = urllib.request.Request(url, headers=BROWSER_HEADERS)
+        try:
+            with urllib.request.urlopen(req, timeout=30, context=CTX) as resp:
+                if not is_amazon(resp.geturl()):
+                    return self.error(400, "Ссылка ведёт не на Amazon.")
+                body = resp.read(6 * 1024 * 1024)
+                charset = resp.headers.get_content_charset() or "utf-8"
+        except urllib.error.HTTPError as e:
+            return self.error(502, f"Amazon ответил {e.code}.")
+        except Exception as e:
+            return self.error(502, f"Нет соединения с Amazon: {e}")
+        html = body.decode(charset, errors="replace")
+        if "captcha" in html.lower() and "productTitle" not in html:
+            return self.error(503, "Amazon показал проверку «я не робот».")
+        self.reply(200, html.encode("utf-8"), "text/html; charset=utf-8")
 
     # --- routes ---
     def do_OPTIONS(self):
@@ -492,7 +1015,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(204)
         self.cors()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Ark-Base, X-OpenAI-Via")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Ark-Base, X-OpenAI-Via, X-Goog-Api-Key")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Access-Control-Max-Age", "600")
         self.end_headers()
@@ -517,7 +1040,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.reply(200, f.read(), "text/html; charset=utf-8")
         if path.path == "/api/health":
             return self.reply(200, {"ok": True, "openaiKey": bool(env_key("OPENAI_API_KEY")),
-                                    "arkKey": bool(env_key("ARK_API_KEY")), "envFile": bool(ENV_LOADED),
+                                    "arkKey": bool(env_key("ARK_API_KEY")), "geminiKey": bool(env_key("GEMINI_API_KEY")),
+                                    "bpKeys": bool(env_key("BYTEPLUS_ACCESS_KEY") and env_key("BYTEPLUS_SECRET_KEY")),
+                                    "tosBucket": bool(env_key("BYTEPLUS_TOS_BUCKET")), "envFile": bool(ENV_LOADED),
                                     "codex": codex_status()})
         if path.path.startswith("/api/codex/jobs/") and self.command == "GET":
             with JOBS_LOCK:
@@ -531,12 +1056,48 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if (self.headers.get("X-OpenAI-Via") or "").lower() == "codex":
                 return self.codex_route(tail)
             return self.forward(OPENAI + tail + (("?" + path.query) if path.query else ""), self.auth_for("OPENAI_API_KEY"))
+        if path.path.startswith("/api/gemini/"):
+            tail = path.path[len("/api/gemini"):]
+            if not tail.startswith("/v1beta/"):
+                return self.error(400, "Неизвестный адрес Gemini.")
+            key = env_key("GEMINI_API_KEY") or self.headers.get("X-Goog-Api-Key")
+            return self.forward(GEMINI + tail + (("?" + path.query) if path.query else ""), None, {"x-goog-api-key": key})
         if path.path.startswith("/api/ark/"):
             base = (self.headers.get("X-Ark-Base") or "").rstrip("/")
             if not host_allowed(base, ARK_HOSTS):
                 return self.error(400, "Неизвестный адрес платформы Seedance: " + base)
             tail = path.path[len("/api/ark"):]
             return self.forward(base + tail + (("?" + path.query) if path.query else ""), self.auth_for("ARK_API_KEY"))
+        if path.path in ("/api/asset/check", "/api/asset/register", "/api/asset/delete") and self.command == "POST":
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                if path.path.endswith("/check"):
+                    return self.reply(200, check_assets(body))
+                if path.path.endswith("/register"):
+                    return self.reply(200, register_asset(body))
+                c = asset_cfg(body)
+                openapi_call(c, "DeleteAsset", {"Id": str(body.get("assetId") or ""), "ProjectName": c["project"]})
+                return self.reply(200, {"ok": True})
+            except AssetError as e:
+                return self.error(400, str(e))
+            except Exception as e:
+                return self.error(502, f"Ошибка библиотеки портретов: {e}")
+        if path.path == "/api/page" and self.command == "GET":
+            return self.amazon_page(urllib.parse.parse_qs(path.query).get("url", [""])[0])
+        if path.path == "/api/davinci" and self.command == "POST":
+            # Writes into this computer's folders: only for a page on this computer, never through Cloudflare.
+            if self.client_address[0] not in ("127.0.0.1", "::1") or self.headers.get("Cf-Connecting-Ip"):
+                return self.error(403, "Экспорт с видео работает только с AI-сервером на этом компьютере.")
+            try:
+                ctype = self.headers.get("Content-Type") or ""
+                if not ctype.startswith("multipart/form-data"):
+                    return self.error(400, "Ожидается multipart/form-data.")
+                fields, files = parse_multipart(ctype, self.read_body())
+                return self.reply(200, davinci_export(fields, files))
+            except CodexError as e:
+                return self.error(400, str(e))
+            except (OSError, ValueError) as e:
+                return self.error(500, f"Не удалось сохранить файлы: {e}")
         if path.path == "/api/fetch" and self.command == "GET":
             url = urllib.parse.parse_qs(path.query).get("url", [""])[0]
             if not host_allowed(url, MEDIA_HOSTS):
@@ -552,6 +1113,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ctype = self.headers.get("Content-Type") or ""
             if tail == "/chat/completions":
                 job = start_job(codex_chat, json.loads(body or b"{}"))
+            elif tail == "/responses":
+                job = start_job(codex_responses, json.loads(body or b"{}"))
             elif tail == "/images/generations":
                 job = start_job(codex_image, json.loads(body or b"{}"), [])
             elif tail == "/images/edits":
@@ -566,13 +1129,103 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.reply(202, {"job": job})
 
 
+
+def self_update():
+    """Double-click = newest version: pull from GitHub before starting.
+
+    Skipped without git, outside a git checkout (e.g. the Ubuntu install in /opt/video),
+    with --no-update / AI_NO_UPDATE, or when the pull fails (offline, local edits)."""
+    if "--no-update" in sys.argv or os.environ.get("AI_NO_UPDATE"):
+        return
+    if not os.path.isdir(os.path.join(ROOT, ".git")):
+        print("ВНИМАНИЕ: эта папка скачана архивом и сама не обновляется — в ней может быть старая версия.")
+        print("  Работай из папки, скачанной через git (например ~/vibe-coding/video), и запускай сервер оттуда.")
+        return
+    git = shutil.which("git")
+    if not git:
+        return
+    head = lambda: subprocess.run([git, "-C", ROOT, "rev-parse", "HEAD"], capture_output=True, text=True,
+                                  timeout=10, stdin=subprocess.DEVNULL).stdout.strip()
+    print("Проверяю обновления…")
+    try:
+        before = head()
+        r = subprocess.run([git, "-C", ROOT, "pull", "--ff-only", "-q"], capture_output=True, text=True,
+                           timeout=60, stdin=subprocess.DEVNULL)
+        after = head()
+    except Exception as e:
+        print(f"  обновление пропущено: {e}")
+        return
+    if r.returncode != 0:
+        why = (r.stderr or r.stdout).strip().splitlines()
+        print("  обновить не получилось" + (": " + why[-1] if why else "") + " — запускаю текущую версию.")
+        return
+    if after and after != before:
+        print("  скачана новая версия — перезапускаю…")
+        os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)] + sys.argv[1:] + ["--no-update"])
+    print("  версия свежая.")
+
+
+def stop_old_server():
+    """If our own AI server already holds the port, stop it so a double-click restarts with new settings."""
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        if b'"ok"' not in opener.open(f"http://127.0.0.1:{PORT}/api/health", timeout=3).read():
+            return False
+        pids = subprocess.run(["lsof", "-ti", f"tcp:{PORT}", "-sTCP:LISTEN"], capture_output=True, text=True,
+                              timeout=5).stdout.split()
+    except Exception:
+        return False
+    stopped = False
+    for pid in pids:
+        if pid.isdigit() and int(pid) != os.getpid():
+            try:
+                os.kill(int(pid), 15)
+                stopped = True
+            except OSError:
+                pass
+    if stopped:
+        print("Старый AI-сервер остановлен — запускаю новый.")
+        time.sleep(1.5)
+    return stopped
+
+
+def page_version():
+    try:
+        with open(os.path.join(ROOT, PAGE), encoding="utf-8", errors="replace") as f:
+            m = re.search(r"версия (\d+(?:\.\d+)*)", f.read())
+        return m.group(1) if m else "?"
+    except OSError:
+        return "?"
+
+
 def main():
-    server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
+    self_update()
+    print(f"Папка приложения: {ROOT} · версия {page_version()}")
+    print(f"  Открывай страницу из этой же папки: {os.path.join(ROOT, PAGE)}")
     url = f"http://{HOST}:{PORT}/"
+    try:
+        try:
+            server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
+        except OSError as e:
+            if e.errno not in (48, 98, 10048) or not stop_old_server():
+                raise
+            server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
+    except OSError as e:
+        if e.errno not in (48, 98, 10048):  # address already in use (macOS, Linux, Windows)
+            raise
+        print(f"Порт {PORT} уже занят — AI-сервер, скорее всего, уже запущен в другом окне Терминала.")
+        print("Чтобы применить новый .env, закрой то окно (или Ctrl+C в нём) и запусти сервер снова.")
+        print(f"Остановить сервер без окна: lsof -ti tcp:{PORT} | xargs kill")
+        try:
+            input("\nНажми Enter, чтобы закрыть это окно.")
+        except EOFError:
+            pass
+        sys.exit(1)
     print(f"AI-сервер запущен: {url}")
     if ENV_LOADED:
         print(f"Из {os.path.basename(ENV_FILE)} взяты: " + ", ".join(ENV_LOADED))
-    for name, label in (("OPENAI_API_KEY", "OpenAI"), ("ARK_API_KEY", "Seedance")):
+    for name, label in (("OPENAI_API_KEY", "OpenAI"), ("GEMINI_API_KEY", "Gemini"), ("ARK_API_KEY", "Seedance"),
+                        ("BYTEPLUS_ACCESS_KEY", "BytePlus AK/SK")):
         print(f"  ключ {label}: " + ("есть на сервере" if env_key(name) else "нет — вводится на странице"))
     print("  Codex: " + refresh_codex_status()["message"])
     if EXTRA_ORIGINS:
