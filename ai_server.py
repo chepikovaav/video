@@ -583,7 +583,7 @@ def parse_multipart(ctype, body):
         name = part.get_param("name", header="content-disposition")
         data = part.get_payload(decode=True) or b""
         if part.get_filename():
-            files.append((part.get_filename(), data))
+            files.append((part.get_filename(), data, name))
         elif name:
             fields[name] = data.decode("utf-8", "replace")
     return fields, files
@@ -604,7 +604,7 @@ def codex_image(fields, refs):
     work = tempfile.mkdtemp(prefix="codex-img-")
     try:
         names = []
-        for i, (_, data) in enumerate(refs, 1):
+        for i, (_, data, *_rest) in enumerate(refs, 1):
             kind = image_kind(data)
             if not kind:
                 continue
@@ -755,6 +755,152 @@ def start_job(fn, *args):
 
     threading.Thread(target=work, daemon=True).start()
     return job_id
+
+
+# ------------------------------------------------------------ DaVinci -----
+# A .drt keeps media as compressed binary records that can't be written blindly,
+# so the timeline with footage is built by DaVinci Resolve itself: the server saves
+# the scene videos/frames, the titles .drt and a Lua script, installs the script into
+# Resolve's Scripts menu, and the script imports the .drt and places each clip on V1.
+RESOLVE_SCRIPT_NAME = "Video Projects — собрать таймлайн.lua"
+MEDIA_EXT = {"mp4", "mov", "webm", "png", "jpg", "jpeg", "webp"}
+
+
+def export_root():
+    custom = os.environ.get("AI_EXPORT_DIR", "").strip()
+    if custom:
+        return os.path.expanduser(custom)
+    movies = os.path.expanduser("~/Movies")
+    return os.path.join(movies, "Video Projects") if os.path.isdir(movies) else os.path.join(ROOT, "export")
+
+
+def resolve_scripts_dir():
+    home = os.path.expanduser("~")
+    if sys.platform == "darwin":
+        base = os.path.join(home, "Library", "Application Support", "Blackmagic Design", "DaVinci Resolve")
+    elif os.name == "nt":
+        base = os.path.join(os.environ.get("APPDATA", home), "Blackmagic Design", "DaVinci Resolve", "Support")
+    else:
+        base = os.path.join(home, ".local", "share", "DaVinciResolve")
+    return os.path.join(base, "Fusion", "Scripts", "Utility"), os.path.isdir(os.path.dirname(base)) or os.path.isdir(base)
+
+
+def lua_str(v):
+    return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "") + '"'
+
+
+def safe_folder_name(name):
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", name or "").strip().strip(".")
+    return re.sub(r"\s+", " ", name)[:80] or "Ролик"
+
+
+def davinci_script(folder, drt, timeline, clips):
+    rows = ",\n".join("  {file=%s, record=%d, frames=%d, still=%s}" % (lua_str(c["file"]), c["record"], c["frames"],
+                                                                     "true" if c["kind"] == "image" else "false")
+                      for c in clips)
+    return f"""-- Создано Video Projects. Запуск: DaVinci Resolve → Workspace → Scripts → «Video Projects — собрать таймлайн».
+-- Импортирует таймлайн с титрами (.drt) и ставит видео сцен на дорожку V1 по разметке сцен.
+local folder = {lua_str(folder)}
+local drt = {lua_str(drt)}
+local timelineName = {lua_str(timeline)}
+local clips = {{
+{rows}
+}}
+
+local function say(t) print("[Video Projects] " .. t) end
+local resolve = resolve or (Resolve and Resolve())
+if not resolve then say("Нет связи с DaVinci Resolve.") return end
+local project = resolve:GetProjectManager():GetCurrentProject()
+if not project then say("Открой или создай проект в DaVinci Resolve и запусти скрипт ещё раз.") return end
+local mp = project:GetMediaPool()
+local bin = mp:AddSubFolder(mp:GetRootFolder(), timelineName .. " — медиа")
+if bin then mp:SetCurrentFolder(bin) end
+
+local tl = mp:ImportTimelineFromFile(drt, {{timelineName = timelineName}})
+if not tl then say("Не удалось импортировать титры: " .. drt) return end
+project:SetCurrentTimeline(tl)
+
+local paths = {{}}
+for i, c in ipairs(clips) do paths[i] = folder .. "/" .. c.file end
+local items = mp:ImportMedia(paths) or {{}}
+local byName = {{}}
+for _, it in pairs(items) do byName[it:GetClipProperty("File Name")] = it end
+
+local infos, missing = {{}}, 0
+for _, c in ipairs(clips) do
+  local it = byName[c.file]
+  if it then
+    local n = c.frames
+    if not c.still then
+      local len = tonumber(it:GetClipProperty("Frames") or "") or n
+      if len > 0 and len < n then n = len end
+    end
+    table.insert(infos, {{mediaPoolItem = it, startFrame = 0, endFrame = n - 1, trackIndex = 1, recordFrame = c.record}})
+  else
+    missing = missing + 1
+    say("Не найден файл: " .. c.file)
+  end
+end
+local placed = mp:AppendToTimeline(infos)
+local count = 0
+if placed then for _ in pairs(placed) do count = count + 1 end end
+say("Готово: таймлайн «" .. timelineName .. "», клипов на V1: " .. count .. (missing > 0 and (", не найдено файлов: " .. missing) or ""))
+"""
+
+
+def davinci_export(fields, files):
+    try:
+        manifest = json.loads(fields.get("manifest") or "{}")
+    except ValueError:
+        raise CodexError("Неверный список клипов.")
+    by_field = {name: (fname, data) for fname, data, name in files if name}
+    if "drt" not in by_field:
+        raise CodexError("Нет файла .drt с титрами.")
+    name = safe_folder_name(fields.get("name"))
+    folder = os.path.join(export_root(), name)
+    os.makedirs(folder, exist_ok=True)
+    for old in glob.glob(os.path.join(folder, "scene-*")) + glob.glob(os.path.join(folder, "end-card.*")):
+        try:
+            os.remove(old)
+        except OSError:
+            pass
+    drt_path = os.path.join(folder, name + ".drt")
+    with open(drt_path, "wb") as f:
+        f.write(by_field["drt"][1])
+    clips = []
+    for k, c in enumerate(manifest.get("clips") or []):
+        part = by_field.get(str(c.get("field")))
+        if not part:
+            continue
+        ext = (os.path.splitext(part[0])[1][1:] or "").lower()
+        if ext not in MEDIA_EXT:
+            ext = image_kind(part[1]) or "mp4"
+        kind = "image" if ext in ("png", "jpg", "jpeg", "webp") else "video"
+        base = "end-card" if c.get("field") == "mEnd" else "scene-%02d" % (int(c.get("scene") or k + 1))
+        file = f"{base}.{ext}"
+        with open(os.path.join(folder, file), "wb") as f:
+            f.write(part[1])
+        clips.append({"file": file, "record": int(c.get("record") or 0), "frames": max(1, int(c.get("frames") or 1)), "kind": kind})
+    if not clips:
+        raise CodexError("Нет ни одного видео или картинки сцен.")
+    script = davinci_script(folder.replace("\\", "/"), drt_path.replace("\\", "/"), name, clips)
+    with open(os.path.join(folder, RESOLVE_SCRIPT_NAME), "w", encoding="utf-8") as f:
+        f.write(script)
+    scripts_dir, resolve_found = resolve_scripts_dir()
+    installed = False
+    if resolve_found:
+        try:
+            os.makedirs(scripts_dir, exist_ok=True)
+            with open(os.path.join(scripts_dir, RESOLVE_SCRIPT_NAME), "w", encoding="utf-8") as f:
+                f.write(script)
+            installed = True
+        except OSError:
+            pass
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", folder], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"  DaVinci: папка {folder} · клипов {len(clips)} · скрипт " + ("в меню Resolve" if installed else "только в папке"))
+    return {"folder": folder, "clips": len(clips), "videos": sum(c["kind"] == "video" for c in clips),
+            "scriptInstalled": installed, "scriptName": RESOLVE_SCRIPT_NAME[:-4]}
 
 
 # ---------------------------------------------------------------- HTTP -----
@@ -938,6 +1084,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.error(502, f"Ошибка библиотеки портретов: {e}")
         if path.path == "/api/page" and self.command == "GET":
             return self.amazon_page(urllib.parse.parse_qs(path.query).get("url", [""])[0])
+        if path.path == "/api/davinci" and self.command == "POST":
+            # Writes into this computer's folders: only for a page on this computer, never through Cloudflare.
+            if self.client_address[0] not in ("127.0.0.1", "::1") or self.headers.get("Cf-Connecting-Ip"):
+                return self.error(403, "Экспорт с видео работает только с AI-сервером на этом компьютере.")
+            try:
+                ctype = self.headers.get("Content-Type") or ""
+                if not ctype.startswith("multipart/form-data"):
+                    return self.error(400, "Ожидается multipart/form-data.")
+                fields, files = parse_multipart(ctype, self.read_body())
+                return self.reply(200, davinci_export(fields, files))
+            except CodexError as e:
+                return self.error(400, str(e))
+            except (OSError, ValueError) as e:
+                return self.error(500, f"Не удалось сохранить файлы: {e}")
         if path.path == "/api/fetch" and self.command == "GET":
             url = urllib.parse.parse_qs(path.query).get("url", [""])[0]
             if not host_allowed(url, MEDIA_HOSTS):
@@ -970,10 +1130,71 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 
+def self_update():
+    """Double-click = newest version: pull from GitHub before starting.
+
+    Skipped without git, outside a git checkout (e.g. the Ubuntu install in /opt/video),
+    with --no-update / AI_NO_UPDATE, or when the pull fails (offline, local edits)."""
+    if "--no-update" in sys.argv or os.environ.get("AI_NO_UPDATE") or not os.path.isdir(os.path.join(ROOT, ".git")):
+        return
+    git = shutil.which("git")
+    if not git:
+        return
+    head = lambda: subprocess.run([git, "-C", ROOT, "rev-parse", "HEAD"], capture_output=True, text=True,
+                                  timeout=10, stdin=subprocess.DEVNULL).stdout.strip()
+    print("Проверяю обновления…")
+    try:
+        before = head()
+        r = subprocess.run([git, "-C", ROOT, "pull", "--ff-only", "-q"], capture_output=True, text=True,
+                           timeout=60, stdin=subprocess.DEVNULL)
+        after = head()
+    except Exception as e:
+        print(f"  обновление пропущено: {e}")
+        return
+    if r.returncode != 0:
+        why = (r.stderr or r.stdout).strip().splitlines()
+        print("  обновить не получилось" + (": " + why[-1] if why else "") + " — запускаю текущую версию.")
+        return
+    if after and after != before:
+        print("  скачана новая версия — перезапускаю…")
+        os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)] + sys.argv[1:] + ["--no-update"])
+    print("  версия свежая.")
+
+
+def stop_old_server():
+    """If our own AI server already holds the port, stop it so a double-click restarts with new settings."""
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        if b'"ok"' not in opener.open(f"http://127.0.0.1:{PORT}/api/health", timeout=3).read():
+            return False
+        pids = subprocess.run(["lsof", "-ti", f"tcp:{PORT}", "-sTCP:LISTEN"], capture_output=True, text=True,
+                              timeout=5).stdout.split()
+    except Exception:
+        return False
+    stopped = False
+    for pid in pids:
+        if pid.isdigit() and int(pid) != os.getpid():
+            try:
+                os.kill(int(pid), 15)
+                stopped = True
+            except OSError:
+                pass
+    if stopped:
+        print("Старый AI-сервер остановлен — запускаю новый.")
+        time.sleep(1.5)
+    return stopped
+
+
 def main():
+    self_update()
     url = f"http://{HOST}:{PORT}/"
     try:
-        server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
+        try:
+            server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
+        except OSError as e:
+            if e.errno not in (48, 98, 10048) or not stop_old_server():
+                raise
+            server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
     except OSError as e:
         if e.errno not in (48, 98, 10048):  # address already in use (macOS, Linux, Windows)
             raise
