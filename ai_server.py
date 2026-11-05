@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Local helper for Video_Projects_Local.html.
 
-Forwards AI requests from the page to OpenAI (frames) and Seedance / ModelArk
-(video), because browsers may block direct calls to these APIs (CORS).
+Forwards AI requests from the page to OpenAI (frames), Seedance / ModelArk and
+Higgsfield (video), because browsers may block direct calls to these APIs (CORS).
 Listens only on 127.0.0.1 (put Cloudflare Tunnel in front of it on a server,
 see deploy/). No dependencies beyond the Python standard library.
 
@@ -10,7 +10,7 @@ see deploy/). No dependencies beyond the Python standard library.
 
 Keys: a `.env` file next to this script (see .env.example) or the environment
 (OPENAI_API_KEY, ARK_API_KEY, GEMINI_API_KEY, BYTEPLUS_ACCESS_KEY,
-BYTEPLUS_SECRET_KEY, BYTEPLUS_TOS_BUCKET). A key on the server wins over one
+BYTEPLUS_SECRET_KEY, BYTEPLUS_TOS_BUCKET, HIGGSFIELD_API_KEY_ID, HIGGSFIELD_API_KEY_SECRET). A key on the server wins over one
 typed in the page; the page hides key fields the server already has.
 
 ChatGPT via Codex: with the Codex CLI logged in with a ChatGPT account
@@ -377,6 +377,149 @@ def check_assets(body):
         except AssetError as e:
             out["inline"] = str(e)
     return out
+
+
+# ----------------------------------------------------------- Higgsfield ----
+# Video through the Higgsfield API (Kling, Seedance, ...). Paid from the API's own USD balance
+# (open.higgsfield.ai → Billing), not from the website plan credits. Keys: .env
+# HIGGSFIELD_API_KEY_ID + HIGGSFIELD_API_KEY_SECRET, or "KEY_ID:KEY_SECRET" typed in the page.
+# The page sends the scene picture as a data URL; it is uploaded to Higgsfield's storage
+# (presigned PUT) because image_url must be a public URL.
+
+HF_API = "https://api.higgsfield.ai"
+HF_ENDPOINT = re.compile(r"[a-z0-9][a-z0-9.\-]*(/[a-z0-9][a-z0-9.\-]*){1,4}")
+HF_IMAGE = re.compile(r"data:(image/(?:png|jpeg|jpg|webp));base64,(.+)", re.S)
+HF_MEDIA = set()  # result URLs Higgsfield returned: /api/fetch downloads only these
+HF_MEDIA_LOCK = threading.Lock()
+
+
+class HFError(Exception):
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status, self.message = status, message
+
+
+def hf_server_key():
+    kid = env_key("HIGGSFIELD_API_KEY_ID") or env_key("HF_API_KEY_ID")
+    sec = env_key("HIGGSFIELD_API_KEY_SECRET") or env_key("HF_API_KEY_SECRET")
+    if kid and sec:
+        return f"{kid}:{sec}"
+    return env_key("HIGGSFIELD_API_KEY") or env_key("HF_CREDENTIALS")
+
+
+def hf_key(typed=None):
+    key = hf_server_key()
+    if key:
+        return key
+    typed = (typed or "").strip()
+    return typed if re.fullmatch(r"[^:\s]+:[^:\s]+", typed) else ""
+
+
+def hf_message(code, detail):
+    if isinstance(detail, list):
+        detail = "; ".join(str(d.get("msg") if isinstance(d, dict) else d) for d in detail)
+    detail = str(detail or "").strip()[:500]
+    hint = {
+        401: "неверный ключ — проверь KEY_ID и KEY_SECRET (open.higgsfield.ai → API Keys).",
+        402: "на балансе Higgsfield API не хватает денег — пополни его в open.higgsfield.ai → Billing "
+             "(это отдельный баланс, кредиты подписки сайта сюда не идут).",
+        403: "доступ запрещён — чаще всего на балансе Higgsfield API не хватает денег: пополни его в "
+             "open.higgsfield.ai → Billing (кредиты подписки сайта сюда не идут).",
+        404: "такой модели нет или она не включена для этого аккаунта.",
+        423: "модель временно недоступна — попробуй позже или выбери другую.",
+        429: "очередь аккаунта заполнена или слишком много запросов — подожди минуту и повтори.",
+        503: "модель сейчас недоступна — попробуй позже или выбери другую.",
+    }.get(code, "")
+    return f"Higgsfield ({code}): " + (hint + " " if hint else "") + (f"Ответ: {detail}" if detail else "")
+
+
+def hf_call(key, method, path, body=None, extra=None, timeout=60):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(HF_API + path, data=data, method=method)
+    req.add_header("Authorization", "Key " + key)
+    req.add_header("Accept", "application/json")
+    req.add_header("User-Agent", "VideoProjectsAI/1.0")
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
+    for k, v in (extra or {}).items():
+        req.add_header(k, v)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout, context=CTX) as resp:
+            raw = resp.read()
+    except urllib.error.HTTPError as e:
+        raw = e.read()
+        try:
+            detail = json.loads(raw).get("detail")
+        except Exception:
+            detail = raw.decode("utf-8", "replace")[:300]
+        raise HFError(e.code, hf_message(e.code, detail))
+    except Exception as e:
+        raise HFError(502, f"Нет соединения с Higgsfield: {e}")
+    try:
+        return json.loads(raw) if raw.strip() else {}
+    except ValueError:
+        raise HFError(502, "Higgsfield ответил не JSON: " + raw.decode("utf-8", "replace")[:200])
+
+
+def hf_upload(key, data_url):
+    m = HF_IMAGE.fullmatch(data_url.strip())
+    if not m:
+        raise HFError(400, "Higgsfield: картинка сцены должна быть PNG, JPEG или WebP.")
+    ctype = "image/jpeg" if m.group(1) == "image/jpg" else m.group(1)
+    try:
+        raw = base64.b64decode(m.group(2), validate=False)
+    except ValueError:
+        raise HFError(400, "Higgsfield: картинка сцены повреждена.")
+    up = hf_call(key, "POST", "/files/generate-upload-url", {"content_type": ctype})
+    url, public = up.get("upload_url"), up.get("public_url")
+    if not url or not public:
+        raise HFError(502, "Higgsfield не дал адрес для загрузки картинки.")
+    req = urllib.request.Request(url, data=raw, method="PUT")  # presigned: no Higgsfield key here
+    for k, v in (up.get("upload_headers") or {"Content-Type": ctype}).items():
+        req.add_header(k, str(v))
+    try:
+        urllib.request.urlopen(req, timeout=120, context=CTX).close()
+    except urllib.error.HTTPError as e:
+        raise HFError(502, f"Higgsfield: картинка не загрузилась ({e.code}).")
+    except Exception as e:
+        raise HFError(502, f"Higgsfield: картинка не загрузилась: {e}")
+    return public
+
+
+def hf_video(key, body):
+    endpoint = str(body.get("endpoint") or "").strip().strip("/")
+    if (not HF_ENDPOINT.fullmatch(endpoint) or "video" not in endpoint
+            or endpoint.split("/")[0] in ("requests", "files", "estimate")):
+        raise HFError(400, "Неверная модель Higgsfield: " + endpoint)
+    args = body.get("args") or {}
+    if not isinstance(args, dict):
+        raise HFError(400, "Неверные параметры видео.")
+    image = str(body.get("image") or "")
+    if image.startswith("data:"):
+        image = hf_upload(key, image)
+    elif not image.startswith("https://"):
+        raise HFError(400, "Нет картинки сцены.")
+    args = {**args, "image_url": image}
+    usd = None
+    try:  # price of this exact request; the estimate is free
+        usd = hf_call(key, "POST", "/estimate/" + endpoint, args, timeout=20).get("usd")
+    except HFError:
+        pass
+    res = hf_call(key, "POST", "/" + endpoint, args, {"Idempotency-Key": str(uuid.uuid4())})
+    rid = str(res.get("request_id") or "")
+    if not rid:
+        raise HFError(502, "Higgsfield не вернул номер задачи.")
+    print(f"  Higgsfield → {endpoint}: задача {rid}" + (f" · ≈ ${usd}" if usd else ""))
+    return {"id": rid, "status": res.get("status"), "usd": usd}
+
+
+def hf_status(key, rid):
+    d = hf_call(key, "GET", f"/requests/{urllib.parse.quote(rid)}/status")
+    url = (d.get("video") or {}).get("url") if isinstance(d.get("video"), dict) else None
+    if isinstance(url, str) and url.startswith("https://"):
+        with HF_MEDIA_LOCK:
+            HF_MEDIA.add(url)
+    return d
 
 
 # ---------------------------------------------------------------- Codex ----
@@ -1015,7 +1158,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(204)
         self.cors()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Ark-Base, X-OpenAI-Via, X-Goog-Api-Key")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Ark-Base, X-OpenAI-Via, X-Goog-Api-Key, X-HF-Key")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Access-Control-Max-Age", "600")
         self.end_headers()
@@ -1051,7 +1194,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                     "arkKey": bool(env_key("ARK_API_KEY")), "geminiKey": bool(env_key("GEMINI_API_KEY")),
                                     "bpKeys": bool(env_key("BYTEPLUS_ACCESS_KEY") and env_key("BYTEPLUS_SECRET_KEY")),
                                     "tosBucket": bool(env_key("BYTEPLUS_TOS_BUCKET")), "envFile": bool(ENV_LOADED),
-                                    "codex": codex_status(), "pageVersion": page_version(),
+                                    "hfKey": bool(hf_server_key()), "codex": codex_status(), "pageVersion": page_version(),
                                     "update": _upd["note"]})
         if path.path.startswith("/api/codex/jobs/") and self.command == "GET":
             with JOBS_LOCK:
@@ -1077,6 +1220,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.error(400, "Неизвестный адрес платформы Seedance: " + base)
             tail = path.path[len("/api/ark"):]
             return self.forward(base + tail + (("?" + path.query) if path.query else ""), self.auth_for("ARK_API_KEY"))
+        if path.path.startswith("/api/hf/"):
+            return self.hf_route(path.path)
         if path.path in ("/api/asset/check", "/api/asset/register", "/api/asset/delete") and self.command == "POST":
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
@@ -1109,10 +1254,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.error(500, f"Не удалось сохранить файлы: {e}")
         if path.path == "/api/fetch" and self.command == "GET":
             url = urllib.parse.parse_qs(path.query).get("url", [""])[0]
-            if not host_allowed(url, MEDIA_HOSTS):
+            with HF_MEDIA_LOCK:
+                from_hf = url in HF_MEDIA
+            if not from_hf and not host_allowed(url, MEDIA_HOSTS):
                 return self.error(400, "Скачивание с этого адреса не разрешено.")
             return self.forward(url, None)
         self.error(404, "Not found")
+
+    def hf_route(self, path):
+        key = hf_key(self.headers.get("X-HF-Key"))
+        if not key:
+            return self.error(401, "Нет ключа Higgsfield. Впиши HIGGSFIELD_API_KEY_ID и HIGGSFIELD_API_KEY_SECRET "
+                                   "в .env рядом с ai_server.py или ключ в «Настройках» (open.higgsfield.ai → API Keys).")
+        try:
+            if path == "/api/hf/video" and self.command == "POST":
+                return self.reply(200, hf_video(key, json.loads(self.read_body() or b"{}")))
+            m = re.fullmatch(r"/api/hf/requests/([A-Za-z0-9_-]{6,100})", path)
+            if m and self.command == "GET":
+                return self.reply(200, hf_status(key, m.group(1)))
+        except HFError as e:
+            return self.error(e.status, e.message)
+        except ValueError as e:
+            return self.error(400, f"Higgsfield: неверный запрос: {e}")
+        return self.error(404, "Not found")
 
     def codex_route(self, tail):
         if self.command != "POST":
@@ -1300,6 +1464,7 @@ def main():
     for name, label in (("OPENAI_API_KEY", "OpenAI"), ("GEMINI_API_KEY", "Gemini"), ("ARK_API_KEY", "Seedance"),
                         ("BYTEPLUS_ACCESS_KEY", "BytePlus AK/SK")):
         print(f"  ключ {label}: " + ("есть на сервере" if env_key(name) else "нет — вводится на странице"))
+    print("  ключ Higgsfield: " + ("есть на сервере" if hf_server_key() else "нет — вводится на странице"))
     print("  Codex: " + refresh_codex_status()["message"])
     if EXTRA_ORIGINS:
         print("Разрешённые адреса страницы: " + ", ".join(sorted(EXTRA_ORIGINS)))
