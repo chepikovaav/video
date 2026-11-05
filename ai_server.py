@@ -42,6 +42,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
+import io
+import struct
+import zipfile
+import xml.etree.ElementTree as ET
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
@@ -1046,6 +1050,423 @@ def davinci_export(fields, files):
             "scriptInstalled": installed, "scriptName": RESOLVE_SCRIPT_NAME[:-4]}
 
 
+# ------------------------------------------- DaVinci: build and render -----
+# One button in the page: the server takes the titles .drt from the page, adds the look of the
+# user's reference timeline (the template inside the page) and asks DaVinci Resolve to build a new
+# project and render it. Needs Resolve running with Preferences → System → General →
+# External scripting using: Local.
+#   V1 scene videos (placed by Resolve)      V4 watermark: zoom 20%, bottom right, 70%, fades out
+#   V2 adjustment clip: FilmConvert Nitrate  V5 end card: logo on a background, Checker Wipe in,
+#      + Gaussian blur grade                     gentle pulse (Fusion comp imported from a file —
+#   V3 titles                                    comps built through the API are not rendered)
+RESOLVE_API = "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting"
+RESOLVE_LIB = "/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion/fusionscript.so"
+DRT_NS = "ListMgt::"
+END_SCALE = 0.34      # end logo size in the reference timeline (Edit zoom)
+WIPE_FRAMES = 24      # Checker Wipe into the end card, centred on the last cut
+WM_FADE = 6           # watermark fade before the end card covers it
+
+
+def page_template():
+    with open(os.path.join(ROOT, PAGE), encoding="utf-8") as f:
+        m = re.search(r'<script id="template-data" type="application/json">(.*?)</script>', f.read(), re.S)
+    meta = json.loads(m.group(1))
+    return meta, {e["name"]: base64.b64decode(e["data"]) for e in meta["entries"]}
+
+
+def drt_parse(data):
+    s = data.decode("utf-8").replace(DRT_NS, "ListMgt__")
+    if s.startswith("<?xml"):
+        s = s.split("\n", 1)[1]
+    comment = ""
+    m = re.match(r"\s*(<!--.*?-->)\s*", s, re.S)
+    if m:
+        comment, s = m.group(1), s[m.end():]
+    return ET.fromstring(s), comment
+
+
+def drt_dump(root, comment):
+    s = ET.tostring(root, encoding="unicode").replace("ListMgt__", DRT_NS)
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n' + (comment + "\n" if comment else "") + s).encode("utf-8")
+
+
+def drt_kid(e, tag):
+    for k in e:
+        if k.tag == tag:
+            return k
+    raise CodexError("В шаблоне таймлайна нет поля " + tag)
+
+
+def drt_set(e, tag, v):
+    drt_kid(e, tag).text = str(v)
+
+
+def drt_tracks(seq):
+    return [drt_kid(el, "Sm2TiTrack") for el in drt_kid(seq, "VideoTrackVec")]
+
+
+def drt_items(track):
+    return [list(el)[0] for el in drt_kid(track, "Items")]
+
+
+def drt_fresh(elem):
+    """Copy of a timeline item with new ids (also in the hex / UTF-16 forms Resolve keeps in blobs)."""
+    s = ET.tostring(elem, encoding="unicode")
+    for old in set(re.findall(r'DbId="([0-9a-f-]{36})"', s)):
+        new = str(uuid.uuid4())
+        s = s.replace(old, new).replace(old.encode().hex(), new.encode().hex())
+        s = s.replace("".join(f"00{ord(c):02x}" for c in old), "".join(f"00{ord(c):02x}" for c in new))
+    return ET.fromstring(s)
+
+
+def build_look_drt(page_drt, *, start, total, end_frames, with_watermark, with_end):
+    """Titles .drt from the page + adjustment clip, watermark and end card from the reference timeline."""
+    meta, tpl = page_template()
+    z = zipfile.ZipFile(io.BytesIO(page_drt))
+    files = {n: z.read(n) for n in z.namelist()}
+    if meta["seq"] not in files:
+        raise CodexError("В файле титров нет таймлайна.")
+    seq, seq_c = drt_parse(files[meta["seq"]])
+    tv = drt_tracks(drt_parse(tpl[meta["seq"]])[0])
+    adj = next(i for i in drt_items(tv[1]) if (drt_kid(i, "Name").text or "") == "Adjustment Clip")
+    wm, wm_fade = drt_items(tv[3])[0], drt_items(tv[3])[1]
+    wipe = next(i for i in drt_items(tv[0]) if i.tag == "Sm2TiTransition")
+    title_fade = next(i for i in drt_items(tv[2]) if i.tag == "Sm2TiTransition")
+    v = drt_tracks(seq)
+    if len(v) < 5:
+        raise CodexError("В шаблоне таймлайна меньше пяти видеодорожек.")
+
+    def put(track, item):
+        ET.SubElement(drt_kid(track, "Items"), "Element").append(item)
+
+    end_start = start + total - WIPE_FRAMES // 2
+    full_end = end_start + end_frames if with_end else start + total
+    a = drt_fresh(adj)
+    drt_set(a, "Start", start); drt_set(a, "Duration", full_end - start)
+    put(v[1], a)
+    if with_end and drt_items(v[2]):
+        f = drt_fresh(title_fade)
+        drt_set(f, "Start", end_start); drt_set(f, "Duration", WIPE_FRAMES // 2)
+        put(v[2], f)
+    if with_watermark:
+        wm_end = end_start + WIPE_FRAMES if with_end else start + total
+        w = drt_fresh(wm)
+        drt_set(w, "Start", start); drt_set(w, "Duration", wm_end - start)
+        put(v[3], w)
+        if with_end:
+            f = drt_fresh(wm_fade)
+            drt_set(f, "Start", wm_end - WM_FADE); drt_set(f, "Duration", WM_FADE)
+            put(v[3], f)
+    mp_t, _ = drt_parse(tpl[meta["mainMpPath"]])
+    pool = [list(e)[0] for e in drt_kid(mp_t, "MediaVec")]
+    white = next(c for c in pool if c.tag == "Sm2MpVideoClip" and drt_kid(c, "Name").text == drt_kid(wm, "Name").text)
+    logo = next(c for c in pool if c.tag == "Sm2MpVideoClip" and (drt_kid(c, "Name").text or "").startswith("Victor_"))
+    if with_end:
+        e = drt_fresh(wm)  # a still clip like the watermark, but showing the end logo, untransformed
+        drt_set(e, "Name", drt_kid(logo, "Name").text)
+        drt_set(e, "MediaRef", logo.get("DbId"))
+        drt_set(e, "EffectFiltersBA", "")
+        drt_set(e, "Start", end_start); drt_set(e, "Duration", end_frames)
+        t = drt_fresh(wipe)
+        drt_set(t, "Start", end_start); drt_set(t, "Duration", WIPE_FRAMES)
+        drt_set(t, "AlignmentType", 1); drt_set(t, "Position", 1)  # at the start edge of the clip
+        put(v[4], t); put(v[4], e)
+    files[meta["seq"]] = drt_dump(seq, seq_c)
+    mp, mp_c = drt_parse(files[meta["mainMpPath"]])
+    mv = drt_kid(mp, "MediaVec")
+    for c in ([white] if with_watermark else []) + ([logo] if with_end else []):
+        ET.SubElement(mv, "Element").append(c)
+    files[meta["mainMpPath"]] = drt_dump(mp, mp_c)
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zo:
+        for n, b in files.items():
+            zo.writestr(n, b)
+    return out.getvalue(), drt_kid(wm, "Name").text, drt_kid(logo, "Name").text
+
+
+def image_size(data):
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return struct.unpack(">II", data[16:24])
+    if data[:2] == b"\xff\xd8":
+        i = 2
+        while i + 9 < len(data):
+            if data[i] != 0xFF:
+                i += 1
+                continue
+            marker, size = data[i + 1], struct.unpack(">H", data[i + 2:i + 4])[0]
+            if marker in (0xC0, 0xC1, 0xC2, 0xC3):
+                h, w = struct.unpack(">HH", data[i + 5:i + 9])
+                return w, h
+            i += 2 + size
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP" and data[12:16] == b"VP8X":
+        return 1 + int.from_bytes(data[24:27], "little"), 1 + int.from_bytes(data[27:30], "little")
+    return None
+
+
+def hex_rgb(value):
+    m = re.fullmatch(r"#?([0-9a-fA-F]{6})", str(value or "").strip())
+    v = m.group(1) if m else "ffffff"
+    return [int(v[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+
+
+RESOLVE_AUTOMATION = r'''
+import json, os, sys, time
+cfg = json.load(open(sys.argv[1], encoding="utf-8"))
+def say(**k):
+    print(json.dumps(k, ensure_ascii=False)); sys.stdout.flush()
+def stop(**k):
+    say(**k); sys.stdout.flush(); os._exit(0)   # fusionscript may crash on a normal exit
+try:
+    import DaVinciResolveScript as dvr
+except Exception as e:
+    stop(error="Не найдены скрипты DaVinci Resolve (%s). Установлен ли DaVinci Resolve?" % e)
+r = dvr.scriptapp("Resolve")
+if not r:
+    stop(error="DaVinci Resolve не отвечает. Открой DaVinci Resolve и проверь: Preferences → System → General → External scripting using: Local.")
+pm = r.GetProjectManager()
+name, n = cfg["project"], 2
+p = pm.CreateProject(name)
+while not p and n < 100:
+    name = "%s (%d)" % (cfg["project"], n); n += 1
+    p = pm.CreateProject(name)
+if not p:
+    stop(error="DaVinci Resolve не создал проект.")
+say(note="Проект «%s» создан, собираю таймлайн…" % name)
+fps = str(cfg["fps"])
+for k, v in (("timelineFrameRate", fps), ("timelinePlaybackFrameRate", fps),
+             ("timelineResolutionWidth", str(cfg["width"])), ("timelineResolutionHeight", str(cfg["height"]))):
+    p.SetSetting(k, v)
+mp = p.GetMediaPool()
+tl = mp.ImportTimelineFromFile(cfg["drt"], {"timelineName": cfg["timeline"]})
+if not tl:
+    stop(error="DaVinci Resolve не открыл таймлайн " + cfg["drt"])
+p.SetCurrentTimeline(tl)
+pool = {c.GetName(): c for c in (mp.GetRootFolder().GetClipList() or [])}
+for key, media in (("watermark", cfg.get("wmName")), ("endLogo", cfg.get("endName"))):
+    if cfg.get(key) and media in pool and not pool[media].ReplaceClip(cfg[key]):
+        say(note="Не удалось подставить файл " + cfg[key])
+items = mp.ImportMedia([c["path"] for c in cfg["clips"]]) or []
+by_path = {}
+for it in items:
+    by_path[it.GetClipProperty("File Path")] = it
+infos, missing = [], []
+for c in cfg["clips"]:
+    it = by_path.get(c["path"])
+    if not it:
+        missing.append(os.path.basename(c["path"])); continue
+    frames = c["frames"]
+    if not c["still"]:
+        try:
+            length = int(float(it.GetClipProperty("Frames") or 0))
+        except ValueError:
+            length = 0
+        if c.get("extra") and (not length or length >= frames + c["extra"]):
+            frames += c["extra"]
+        elif length and length < frames:
+            frames = length
+    infos.append({"mediaPoolItem": it, "startFrame": 0, "endFrame": frames - 1, "trackIndex": 1, "recordFrame": c["record"]})
+placed = mp.AppendToTimeline(infos) or []
+say(note="Видео сцен на таймлайне: %d%s" % (len(placed), (", не найдены: " + ", ".join(missing)) if missing else ""))
+if cfg.get("endComp"):
+    ends = [it for it in (tl.GetItemListInTrack("video", 5) or []) if it.GetMediaPoolItem()]
+    if ends:
+        end = ends[-1]
+        end.AddFusionComp()
+        raw = os.path.join(cfg["folder"], "end-card-base.comp")
+        end.ExportFusionComp(raw, 1)
+        text = open(raw, encoding="utf-8").read()
+        i = text.find("MediaOut1 = Saver {")
+        j = text.find('SourceOp = "MediaIn1"', i)
+        if i < 0 or j < 0:
+            say(note="Не удалось настроить заставку в Fusion")
+        else:
+            text = text[:j] + 'SourceOp = "VPMerge"' + text[j + len('SourceOp = "MediaIn1"'):]
+            text = text[:i] + cfg["endComp"] + "\n\t\t" + text[i:]
+            comp_path = os.path.join(cfg["folder"], "end-card.comp")
+            open(comp_path, "w", encoding="utf-8").write(text)
+            end.ImportFusionComp(comp_path)
+            names = end.GetFusionCompNameList() or []
+            if names:
+                end.LoadFusionCompByName(names[-1])
+pm.SaveProject()
+out = None
+if cfg.get("render"):
+    r.OpenPage("deliver")
+    if not p.SetCurrentRenderFormatAndCodec("mp4", "H264"):
+        p.SetCurrentRenderFormatAndCodec("mov", "H264")
+    p.SetRenderSettings({"SelectAllFrames": True, "TargetDir": cfg["folder"], "CustomName": cfg["outName"]})
+    job = p.AddRenderJob()
+    if not job or not p.StartRendering([job]):
+        stop(error="DaVinci Resolve не начал рендер. Проект собран — отрендерь его вручную на вкладке Deliver.", project=name)
+    last = -1
+    while p.IsRenderingInProgress():
+        st = p.GetRenderJobStatus(job) or {}
+        pct = int(st.get("CompletionPercentage") or 0)
+        if pct != last:
+            say(note="Рендер в DaVinci: %d%%" % pct); last = pct
+        time.sleep(2)
+    st = p.GetRenderJobStatus(job) or {}
+    if st.get("JobStatus") != "Complete":
+        stop(error="Рендер не завершился: %s. Проект «%s» собран." % (st.get("JobStatus") or "ошибка", name), project=name)
+    for ext in ("mp4", "mov"):
+        f = os.path.join(cfg["folder"], cfg["outName"] + "." + ext)
+        if os.path.exists(f):
+            out = f
+    r.OpenPage("edit")
+stop(result={"project": name, "timeline": cfg["timeline"], "video": out, "scenes": len(placed), "missing": missing})
+'''
+
+
+def end_comp_text(logo, width, height, bg):
+    size = image_size(logo) or (width, height)
+    fit = min(1.0, (height * size[0]) / (size[1] * width))  # Fusion sizes are relative to the frame width
+    r, g, b = hex_rgb(bg)
+    return f'''VPBackground = Background {{
+			Inputs = {{
+				UseFrameFormatSettings = Input {{ Value = 0, }},
+				Width = Input {{ Value = {width}, }},
+				Height = Input {{ Value = {height}, }},
+				TopLeftRed = Input {{ Value = {r:.4f}, }},
+				TopLeftGreen = Input {{ Value = {g:.4f}, }},
+				TopLeftBlue = Input {{ Value = {b:.4f}, }},
+				TopLeftAlpha = Input {{ Value = 1, }},
+			}},
+		}},
+		VPPulse = Transform {{
+			Inputs = {{
+				Size = Input {{ Expression = "{END_SCALE * fit:.5f}*(1+0.035*sin(time*2*pi/48))", }},
+				Input = Input {{ SourceOp = "MediaIn1", Source = "Output", }},
+			}},
+		}},
+		VPMerge = Merge {{
+			Inputs = {{
+				Background = Input {{ SourceOp = "VPBackground", Source = "Output", }},
+				Foreground = Input {{ SourceOp = "VPPulse", Source = "Output", }},
+			}},
+		}},'''
+
+
+def davinci_build(fields, files, note):
+    """Save the media, build the full .drt and let DaVinci Resolve assemble and render the project."""
+    try:
+        manifest = json.loads(fields.get("manifest") or "{}")
+    except ValueError:
+        raise CodexError("Неверный список клипов.")
+    by_field = {name: (fname, data) for fname, data, name in files if name}
+    if "drt" not in by_field:
+        raise CodexError("Нет файла .drt с титрами.")
+    fps = int(manifest.get("fps") or 24)
+    start, total = int(manifest.get("start") or 86400), int(manifest.get("total") or 0)
+    width, height = int(manifest.get("width") or 1920), int(manifest.get("height") or 1080)
+    if total < 1 or not (16 <= width <= 8192 and 16 <= height <= 8192):
+        raise CodexError("Неверная разметка таймлайна.")
+    name = safe_folder_name(fields.get("name"))
+    stamp = time.strftime("%Y-%m-%d %H-%M")
+    folder = os.path.join(export_root(), name, "DaVinci " + stamp)
+    os.makedirs(folder, exist_ok=True)
+    clips = []
+    scene_clips = manifest.get("clips") or []
+    for k, c in enumerate(scene_clips):
+        part = by_field.get(str(c.get("field")))
+        if not part:
+            continue
+        ext = (os.path.splitext(part[0])[1][1:] or "").lower()
+        if ext not in MEDIA_EXT:
+            ext = image_kind(part[1]) or "mp4"
+        # a letter after the number: Resolve would join scene-01.png, scene-02.png… into one image sequence
+        path = os.path.join(folder, "scene-%02d-clip.%s" % (int(c.get("scene") or k + 1), ext))
+        with open(path, "wb") as f:
+            f.write(part[1])
+        clips.append({"path": path, "record": int(c.get("record") or start), "frames": max(1, int(c.get("frames") or 1)),
+                      "still": ext in ("png", "jpg", "jpeg", "webp"), "extra": 0})
+    if not clips:
+        raise CodexError("Нет ни одного видео или картинки сцен.")
+    logos = {}
+    for key in ("watermark", "endLogo"):
+        part = by_field.get(key)
+        if part:
+            ext = image_kind(part[1]) or "png"
+            path = os.path.join(folder, ("watermark." if key == "watermark" else "end-logo.") + ext)
+            with open(path, "wb") as f:
+                f.write(part[1])
+            logos[key] = (path, part[1])
+    end_frames = max(WIPE_FRAMES, round(float(manifest.get("endSeconds") or 3) * fps))
+    with_end = "endLogo" in logos
+    if with_end:
+        clips[-1]["extra"] = WIPE_FRAMES // 2  # the last scene runs on under the wipe
+    drt, wm_name, end_name = build_look_drt(by_field["drt"][1], start=start, total=total, end_frames=end_frames,
+                                            with_watermark="watermark" in logos, with_end=with_end)
+    drt_path = os.path.join(folder, name + ".drt")
+    with open(drt_path, "wb") as f:
+        f.write(drt)
+    with open(os.path.join(folder, "titles.drt"), "wb") as f:  # the page's titles only, for checking
+        f.write(by_field["drt"][1])
+    cfg = {"project": f"{name} {stamp}", "timeline": name, "drt": drt_path, "folder": folder, "fps": fps,
+           "width": width, "height": height, "clips": clips, "wmName": wm_name, "endName": end_name,
+           "watermark": logos.get("watermark", ("",))[0], "endLogo": logos.get("endLogo", ("",))[0],
+           "endComp": end_comp_text(logos["endLogo"][1], width, height, fields.get("endBg")) if with_end else "",
+           "render": fields.get("render") == "1", "outName": name}
+    cfg_path = os.path.join(folder, "davinci-build.json")
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=1)
+    script = os.path.join(folder, "davinci-build.py")
+    with open(script, "w", encoding="utf-8") as f:
+        f.write(RESOLVE_AUTOMATION)
+    env = dict(os.environ, RESOLVE_SCRIPT_API=RESOLVE_API, RESOLVE_SCRIPT_LIB=RESOLVE_LIB,
+               PYTHONPATH=os.path.join(RESOLVE_API, "Modules"))
+    note("Отправляю проект в DaVinci Resolve…")
+    proc = subprocess.Popen([sys.executable, script, cfg_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, env=env, text=True, encoding="utf-8", errors="replace")
+    result, error, tail = None, None, []
+    for line in proc.stdout:
+        line = line.strip()
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            if line:
+                tail = (tail + [line])[-5:]
+            continue
+        if msg.get("note"):
+            note(msg["note"])
+            print("  DaVinci: " + msg["note"])
+        if msg.get("error"):
+            error = msg["error"]
+        if msg.get("result"):
+            result = msg["result"]
+    proc.wait()
+    if error:
+        raise CodexError(error)
+    if not result:
+        raise CodexError("DaVinci Resolve не ответил. " + " ".join(tail)[-300:])
+    result["folder"] = folder
+    if result.get("video") and sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", result["video"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return result
+
+
+def start_build_job(fields, files):
+    job_id = uuid.uuid4().hex
+    with JOBS_LOCK:
+        JOBS[job_id] = {"status": "running", "t": time.time(), "note": "Готовлю файлы…"}
+
+    def note(text):
+        with JOBS_LOCK:
+            JOBS[job_id]["note"] = text
+
+    def work():
+        try:
+            result = {"status": "done", "result": davinci_build(fields, files, note)}
+        except CodexError as e:
+            result = {"status": "error", "error": str(e)}
+        except Exception as e:
+            result = {"status": "error", "error": f"{type(e).__name__}: {e}"}
+        with JOBS_LOCK:
+            JOBS[job_id].update(result)
+
+    threading.Thread(target=work, daemon=True).start()
+    return job_id
+
+
 # ---------------------------------------------------------------- HTTP -----
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -1238,6 +1659,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.error(502, f"Ошибка библиотеки портретов: {e}")
         if path.path == "/api/page" and self.command == "GET":
             return self.amazon_page(urllib.parse.parse_qs(path.query).get("url", [""])[0])
+        if path.path == "/api/davinci/build" and self.command == "POST":
+            if self.client_address[0] not in ("127.0.0.1", "::1") or self.headers.get("Cf-Connecting-Ip"):
+                return self.error(403, "Сборка в DaVinci работает только с AI-сервером на этом компьютере.")
+            ctype = self.headers.get("Content-Type") or ""
+            if not ctype.startswith("multipart/form-data"):
+                return self.error(400, "Ожидается multipart/form-data.")
+            fields, files = parse_multipart(ctype, self.read_body())
+            return self.reply(202, {"job": start_build_job(fields, files)})
         if path.path == "/api/davinci" and self.command == "POST":
             # Writes into this computer's folders: only for a page on this computer, never through Cloudflare.
             if self.client_address[0] not in ("127.0.0.1", "::1") or self.headers.get("Cf-Connecting-Ip"):
