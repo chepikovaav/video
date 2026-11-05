@@ -383,6 +383,69 @@ def check_assets(body):
     return out
 
 
+# ------------------------------------------------------ ElevenLabs Music ----
+# Background music for the ad, exactly as long as the ad: POST /v1/music returns the audio (mp3).
+# Key: .env ELEVENLABS_API_KEY or the page's field (header X-Eleven-Key). Paid plans only (Starter+ for
+# commercial use), $0.15 per minute.
+ELEVEN_API = "https://api.elevenlabs.io/v1/music"
+ELEVEN_MODELS = ("music_v2_5", "music_v2", "music_v1")
+
+
+def eleven_key(typed=None):
+    return env_key("ELEVENLABS_API_KEY") or env_key("ELEVEN_API_KEY") or (typed or "").strip()
+
+
+def eleven_music(key, body):
+    prompt = str(body.get("prompt") or "").strip()
+    if not prompt:
+        raise HFError(400, "Опиши музыку — поле «Описание музыки» пустое.")
+    try:
+        ms = int(round(float(body.get("seconds") or 30) * 1000))
+    except (TypeError, ValueError):
+        raise HFError(400, "Неверная длина трека.")
+    ms = max(3000, min(300000, ms))
+    model = body.get("model") if body.get("model") in ELEVEN_MODELS else ELEVEN_MODELS[0]
+    data = {"prompt": prompt[:4000], "music_length_ms": ms, "model_id": model,
+            "force_instrumental": bool(body.get("instrumental", True))}
+    req = urllib.request.Request(ELEVEN_API + "?output_format=mp3_44100_192", data=json.dumps(data).encode(), method="POST")
+    req.add_header("xi-api-key", key)
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "audio/mpeg")
+    req.add_header("User-Agent", "VideoProjectsAI/1.0")
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT, context=CTX) as resp:
+            audio = resp.read()
+            ctype = resp.headers.get("Content-Type") or "audio/mpeg"
+    except urllib.error.HTTPError as e:
+        raw = e.read()
+        try:
+            detail = json.loads(raw).get("detail")
+        except Exception:
+            detail = raw.decode("utf-8", "replace")[:300]
+        msg = ""
+        if isinstance(detail, dict):
+            status, data_ = detail.get("status"), detail.get("data") or {}
+            if status in ("bad_prompt", "bad_composition_plan"):
+                tip = data_.get("prompt_suggestion") or ""
+                raise HFError(400, "ElevenLabs отклонил описание: в нём есть исполнитель, группа или песня — опиши звучание "
+                                   "словами (жанр, темп, инструменты)." + (" Можно так: " + tip if tip else ""))
+            msg = detail.get("message") or status or ""
+        elif isinstance(detail, list):
+            msg = "; ".join(str(d.get("msg") if isinstance(d, dict) else d) for d in detail)
+        else:
+            msg = str(detail or "")
+        hint = {401: "неверный ключ ElevenLabs.", 402: "на балансе ElevenLabs не хватает средств.",
+                403: "ключу не хватает прав или нет платного плана — музыка через API только на платных планах.",
+                429: "слишком много запросов или закончился лимит — подожди и повтори."}.get(e.code, "")
+        raise HFError(e.code, f"ElevenLabs ({e.code}): " + (hint + " " if hint else "") + (msg[:400] if msg else ""))
+    except Exception as e:
+        raise HFError(502, f"Нет соединения с ElevenLabs: {e}")
+    if len(audio) < 1000:
+        raise HFError(502, "ElevenLabs вернул пустой файл.")
+    print(f"  ElevenLabs → музыка {ms / 1000:.1f} с ({model})")
+    return audio, ctype
+
+
 # ----------------------------------------------------------- Higgsfield ----
 # Video through the Higgsfield API (Kling, Seedance, ...). Paid from the API's own USD balance
 # (open.higgsfield.ai → Billing), not from the website plan credits. Keys: .env
@@ -1429,6 +1492,13 @@ if cfg.get("endComp"):
                 end.LoadFusionCompByName(names[-1])
 r.OpenPage("edit")
 tl.SetCurrentTimecode(tl.GetStartTimecode())
+if cfg.get("music"):   # the music on A1 from the start; it was generated as long as the ad
+    got = mp.ImportMedia([cfg["music"]]) or []
+    if got:
+        if not mp.AppendToTimeline([{"mediaPoolItem": got[0], "trackIndex": 1, "recordFrame": tl.GetStartFrame(), "mediaType": 2}]):
+            say(note="Не удалось поставить музыку на A1")
+    else:
+        say(note="DaVinci не открыл файл музыки")
 pm.SaveProject()
 out = render(p, cfg["folder"], cfg["outName"]) if cfg.get("render") else None
 stop(result={"project": name, "timeline": cfg["timeline"], "video": out, "scenes": len(placed), "missing": missing, "slowed": slowed})
@@ -1563,6 +1633,12 @@ def davinci_build(fields, files, note):
                       "still": ext in ("png", "jpg", "jpeg", "webp"), "extra": 0})
     if not clips:
         raise CodexError("Нет ни одного видео или картинки сцен.")
+    music = by_field.get("music")
+    music_path = ""
+    if music:
+        music_path = os.path.join(folder, "music." + ((os.path.splitext(music[0])[1][1:] or "mp3").lower()))
+        with open(music_path, "wb") as f:
+            f.write(music[1])
     logos = {}
     for key in ("watermark", "endLogo"):
         part = by_field.get(key)
@@ -1596,7 +1672,7 @@ def davinci_build(fields, files, note):
            "width": width, "height": height, "clips": clips, "wmName": wm_name, "endName": end_name,
            "watermark": logos.get("watermark", ("",))[0], "endLogo": logos.get("endLogo", ("",))[0],
            "endComp": end_comp_text(logos["endLogo"][1], width, height, fields.get("endBg")) if with_end else "",
-           "render": fields.get("render") == "1", "outName": name, "mode": "build"}
+           "render": fields.get("render") == "1", "outName": name, "mode": "build", "music": music_path}
     result = run_resolve(cfg, folder, note)
     result["folder"] = folder
     if not result.get("video") and sys.platform == "darwin":  # bring DaVinci to the front to check the edit
@@ -1742,7 +1818,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(204)
         self.cors()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Ark-Base, X-OpenAI-Via, X-Goog-Api-Key, X-HF-Key")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Ark-Base, X-OpenAI-Via, X-Goog-Api-Key, X-HF-Key, X-Eleven-Key")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Access-Control-Max-Age", "600")
         self.end_headers()
@@ -1778,7 +1854,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                     "arkKey": bool(env_key("ARK_API_KEY")), "geminiKey": bool(env_key("GEMINI_API_KEY")),
                                     "bpKeys": bool(env_key("BYTEPLUS_ACCESS_KEY") and env_key("BYTEPLUS_SECRET_KEY")),
                                     "tosBucket": bool(env_key("BYTEPLUS_TOS_BUCKET")), "envFile": bool(ENV_LOADED),
-                                    "hfKey": bool(hf_server_key()), "codex": codex_status(), "pageVersion": page_version(),
+                                    "hfKey": bool(hf_server_key()), "elevenKey": bool(eleven_key()), "codex": codex_status(), "pageVersion": page_version(),
                                     "update": _upd["note"]})
         if path.path.startswith("/api/codex/jobs/") and self.command == "GET":
             with JOBS_LOCK:
@@ -1806,6 +1882,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.forward(base + tail + (("?" + path.query) if path.query else ""), self.auth_for("ARK_API_KEY"))
         if path.path.startswith("/api/hf/"):
             return self.hf_route(path.path)
+        if path.path == "/api/eleven/music" and self.command == "POST":
+            key = eleven_key(self.headers.get("X-Eleven-Key"))
+            if not key:
+                return self.error(401, "Нет ключа ElevenLabs: впиши его в «Настройки» → «Музыка» или ELEVENLABS_API_KEY в .env.")
+            try:
+                audio, ctype = eleven_music(key, json.loads(self.read_body() or b"{}"))
+            except HFError as e:
+                return self.error(e.status, e.message)
+            except ValueError:
+                return self.error(400, "Неверный запрос.")
+            return self.reply(200, audio, ctype)
         if path.path in ("/api/asset/check", "/api/asset/register", "/api/asset/delete") and self.command == "POST":
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
@@ -2065,6 +2152,7 @@ def main():
                         ("BYTEPLUS_ACCESS_KEY", "BytePlus AK/SK")):
         print(f"  ключ {label}: " + ("есть на сервере" if env_key(name) else "нет — вводится на странице"))
     print("  ключ Higgsfield: " + ("есть на сервере" if hf_server_key() else "нет — вводится на странице"))
+    print("  ключ ElevenLabs: " + ("есть на сервере" if eleven_key() else "нет — вводится на странице"))
     print("  Codex: " + refresh_codex_status()["message"])
     if EXTRA_ORIGINS:
         print("Разрешённые адреса страницы: " + ", ".join(sorted(EXTRA_ORIGINS)))
