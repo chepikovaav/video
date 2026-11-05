@@ -1220,12 +1220,57 @@ try:
     import DaVinciResolveScript as dvr
 except Exception as e:
     stop(error="Не найдены скрипты DaVinci Resolve (%s). Установлен ли DaVinci Resolve?" % e)
-r = dvr.scriptapp("Resolve")
+r, deadline = None, time.time() + float(cfg.get("wait") or 5)
+while True:   # a DaVinci that is just starting answers after a while
+    r = dvr.scriptapp("Resolve")
+    if r and r.GetProjectManager() or time.time() > deadline:
+        break
+    time.sleep(3)
 if not r:
-    stop(error="DaVinci Resolve не отвечает. Открой DaVinci Resolve и проверь: Preferences → System → General → External scripting using: Local.")
+    stop(error="DaVinci Resolve не отвечает. Проверь в DaVinci: Preferences → System → General → External scripting using: Local, и нажми ещё раз.")
 pm = r.GetProjectManager()
+
+
+def render(p, folder, out_name):
+    r.OpenPage("deliver")
+    if not p.SetCurrentRenderFormatAndCodec("mp4", "H264"):
+        p.SetCurrentRenderFormatAndCodec("mov", "H264")
+    p.SetRenderSettings({"SelectAllFrames": True, "TargetDir": folder, "CustomName": out_name})
+    job = p.AddRenderJob()
+    if not job or not p.StartRendering([job]):
+        stop(error="DaVinci Resolve не начал рендер. Отрендерь проект вручную на вкладке Deliver.")
+    last = -1
+    while p.IsRenderingInProgress():
+        st = p.GetRenderJobStatus(job) or {}
+        pct = int(st.get("CompletionPercentage") or 0)
+        if pct != last:
+            say(note="Рендер в DaVinci: %d%%" % pct); last = pct
+        time.sleep(2)
+    st = p.GetRenderJobStatus(job) or {}
+    if st.get("JobStatus") != "Complete":
+        stop(error="Рендер не завершился: %s." % (st.get("JobStatus") or "ошибка"))
+    r.OpenPage("edit")
+    for ext in ("mp4", "mov"):
+        f = os.path.join(folder, out_name + "." + ext)
+        if os.path.exists(f):
+            return f
+    return None
+
+
+if cfg.get("mode") == "render":   # render what the user has checked (and maybe changed) in DaVinci
+    p = pm.GetCurrentProject()
+    if not p or p.GetName() != cfg["project"]:
+        stop(error="Сейчас в DaVinci открыт другой проект. Открой проект «%s» (File → Project Manager) и нажми «Отрендерить» ещё раз." % cfg["project"])
+    pm.SaveProject()
+    stop(result={"project": cfg["project"], "video": render(p, cfg["folder"], cfg["outName"])})
+if not r.GetCurrentPage():   # just started: the Project Manager is showing, projects can't be created yet
+    r.OpenPage("edit"); time.sleep(3)
 name, n = cfg["project"], 2
 p = pm.CreateProject(name)
+for _ in range(10):
+    if p or pm.GetProjectListInCurrentFolder() and name in pm.GetProjectListInCurrentFolder():
+        break
+    time.sleep(2); p = pm.CreateProject(name)
 while not p and n < 100:
     name = "%s (%d)" % (cfg["project"], n); n += 1
     p = pm.CreateProject(name)
@@ -1288,31 +1333,10 @@ if cfg.get("endComp"):
             names = end.GetFusionCompNameList() or []
             if names:
                 end.LoadFusionCompByName(names[-1])
+r.OpenPage("edit")
+tl.SetCurrentTimecode(tl.GetStartTimecode())
 pm.SaveProject()
-out = None
-if cfg.get("render"):
-    r.OpenPage("deliver")
-    if not p.SetCurrentRenderFormatAndCodec("mp4", "H264"):
-        p.SetCurrentRenderFormatAndCodec("mov", "H264")
-    p.SetRenderSettings({"SelectAllFrames": True, "TargetDir": cfg["folder"], "CustomName": cfg["outName"]})
-    job = p.AddRenderJob()
-    if not job or not p.StartRendering([job]):
-        stop(error="DaVinci Resolve не начал рендер. Проект собран — отрендерь его вручную на вкладке Deliver.", project=name)
-    last = -1
-    while p.IsRenderingInProgress():
-        st = p.GetRenderJobStatus(job) or {}
-        pct = int(st.get("CompletionPercentage") or 0)
-        if pct != last:
-            say(note="Рендер в DaVinci: %d%%" % pct); last = pct
-        time.sleep(2)
-    st = p.GetRenderJobStatus(job) or {}
-    if st.get("JobStatus") != "Complete":
-        stop(error="Рендер не завершился: %s. Проект «%s» собран." % (st.get("JobStatus") or "ошибка", name), project=name)
-    for ext in ("mp4", "mov"):
-        f = os.path.join(cfg["folder"], cfg["outName"] + "." + ext)
-        if os.path.exists(f):
-            out = f
-    r.OpenPage("edit")
+out = render(p, cfg["folder"], cfg["outName"]) if cfg.get("render") else None
 stop(result={"project": name, "timeline": cfg["timeline"], "video": out, "scenes": len(placed), "missing": missing})
 '''
 
@@ -1344,6 +1368,70 @@ def end_comp_text(logo, width, height, bg):
 				Foreground = Input {{ SourceOp = "VPPulse", Source = "Output", }},
 			}},
 		}},'''
+
+
+def resolve_running():
+    if sys.platform != "darwin":
+        return True
+    return subprocess.run(["pgrep", "-f", "DaVinci Resolve.app/Contents/MacOS/Resolve"], capture_output=True).returncode == 0
+
+
+def run_resolve(cfg, folder, note):
+    """Run the automation in a separate Python (fusionscript can crash its host) and relay its notes."""
+    cfg = dict(cfg, wait=5)
+    if not resolve_running():
+        if not os.path.isdir("/Applications/DaVinci Resolve/DaVinci Resolve.app"):
+            raise CodexError("DaVinci Resolve не найден в «Программах».")
+        note("Открываю DaVinci Resolve — это до минуты…")
+        subprocess.Popen(["open", "-a", "DaVinci Resolve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cfg["wait"] = 150
+    cfg_path = os.path.join(folder, "davinci-%s.json" % cfg.get("mode", "build"))
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=1)
+    script = os.path.join(folder, "davinci-build.py")
+    with open(script, "w", encoding="utf-8") as f:
+        f.write(RESOLVE_AUTOMATION)
+    env = dict(os.environ, RESOLVE_SCRIPT_API=RESOLVE_API, RESOLVE_SCRIPT_LIB=RESOLVE_LIB,
+               PYTHONPATH=os.path.join(RESOLVE_API, "Modules"))
+    if cfg["wait"] < 10:
+        note("Подключаюсь к DaVinci Resolve…")
+    proc = subprocess.Popen([sys.executable, script, cfg_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, env=env, text=True, encoding="utf-8", errors="replace")
+    result, error, tail = None, None, []
+    for line in proc.stdout:
+        line = line.strip()
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            if line:
+                tail = (tail + [line])[-5:]
+            continue
+        if msg.get("note"):
+            note(msg["note"])
+            print("  DaVinci: " + msg["note"])
+        if msg.get("error"):
+            error = msg["error"]
+        if msg.get("result"):
+            result = msg["result"]
+    proc.wait()
+    if error:
+        raise CodexError(error)
+    if not result:
+        raise CodexError("DaVinci Resolve не ответил. " + " ".join(tail)[-300:])
+    return result
+
+
+def davinci_render(fields, files, note):
+    """Render the project the user has checked in DaVinci (with any changes made there)."""
+    project, folder = (fields.get("project") or "").strip(), (fields.get("folder") or "").strip()
+    root = os.path.realpath(export_root())
+    if not project or not folder or not os.path.realpath(folder).startswith(root + os.sep) or not os.path.isdir(folder):
+        raise CodexError("Нет собранного проекта — сначала нажми «Собрать в DaVinci».")
+    result = run_resolve({"mode": "render", "project": project, "folder": folder,
+                          "outName": safe_folder_name(fields.get("name"))}, folder, note)
+    if result.get("video") and sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", result["video"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return dict(result, folder=folder)
 
 
 def davinci_build(fields, files, note):
@@ -1405,46 +1493,18 @@ def davinci_build(fields, files, note):
            "width": width, "height": height, "clips": clips, "wmName": wm_name, "endName": end_name,
            "watermark": logos.get("watermark", ("",))[0], "endLogo": logos.get("endLogo", ("",))[0],
            "endComp": end_comp_text(logos["endLogo"][1], width, height, fields.get("endBg")) if with_end else "",
-           "render": fields.get("render") == "1", "outName": name}
-    cfg_path = os.path.join(folder, "davinci-build.json")
-    with open(cfg_path, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=1)
-    script = os.path.join(folder, "davinci-build.py")
-    with open(script, "w", encoding="utf-8") as f:
-        f.write(RESOLVE_AUTOMATION)
-    env = dict(os.environ, RESOLVE_SCRIPT_API=RESOLVE_API, RESOLVE_SCRIPT_LIB=RESOLVE_LIB,
-               PYTHONPATH=os.path.join(RESOLVE_API, "Modules"))
-    note("Отправляю проект в DaVinci Resolve…")
-    proc = subprocess.Popen([sys.executable, script, cfg_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            stdin=subprocess.DEVNULL, env=env, text=True, encoding="utf-8", errors="replace")
-    result, error, tail = None, None, []
-    for line in proc.stdout:
-        line = line.strip()
-        try:
-            msg = json.loads(line)
-        except ValueError:
-            if line:
-                tail = (tail + [line])[-5:]
-            continue
-        if msg.get("note"):
-            note(msg["note"])
-            print("  DaVinci: " + msg["note"])
-        if msg.get("error"):
-            error = msg["error"]
-        if msg.get("result"):
-            result = msg["result"]
-    proc.wait()
-    if error:
-        raise CodexError(error)
-    if not result:
-        raise CodexError("DaVinci Resolve не ответил. " + " ".join(tail)[-300:])
+           "render": fields.get("render") == "1", "outName": name, "mode": "build"}
+    result = run_resolve(cfg, folder, note)
     result["folder"] = folder
+    if not result.get("video") and sys.platform == "darwin":  # bring DaVinci to the front to check the edit
+        subprocess.Popen(["open", "-a", "DaVinci Resolve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if result.get("video") and sys.platform == "darwin":
         subprocess.Popen(["open", "-R", result["video"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return result
 
 
-def start_build_job(fields, files):
+def start_build_job(fields, files, fn=None):
+    fn = fn or davinci_build
     job_id = uuid.uuid4().hex
     with JOBS_LOCK:
         JOBS[job_id] = {"status": "running", "t": time.time(), "note": "Готовлю файлы…"}
@@ -1455,7 +1515,7 @@ def start_build_job(fields, files):
 
     def work():
         try:
-            result = {"status": "done", "result": davinci_build(fields, files, note)}
+            result = {"status": "done", "result": fn(fields, files, note)}
         except CodexError as e:
             result = {"status": "error", "error": str(e)}
         except Exception as e:
@@ -1667,6 +1727,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.error(400, "Ожидается multipart/form-data.")
             fields, files = parse_multipart(ctype, self.read_body())
             return self.reply(202, {"job": start_build_job(fields, files)})
+        if path.path == "/api/davinci/render" and self.command == "POST":
+            if self.client_address[0] not in ("127.0.0.1", "::1") or self.headers.get("Cf-Connecting-Ip"):
+                return self.error(403, "Рендер в DaVinci работает только с AI-сервером на этом компьютере.")
+            try:
+                fields = {k: str(v) for k, v in json.loads(self.read_body() or b"{}").items()}
+            except (ValueError, AttributeError):
+                return self.error(400, "Неверный запрос.")
+            return self.reply(202, {"job": start_build_job(fields, [], davinci_render)})
         if path.path == "/api/davinci" and self.command == "POST":
             # Writes into this computer's folders: only for a page on this computer, never through Cloudflare.
             if self.client_address[0] not in ("127.0.0.1", "::1") or self.headers.get("Cf-Connecting-Ip"):
