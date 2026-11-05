@@ -1395,6 +1395,19 @@ if cfg.get("mode") == "render":   # render what the user has checked (and maybe 
         if not p:
             stop(error="DaVinci не открыл проект «%s». Открой его сам (File → Project Manager) и нажми «Отрендерить» ещё раз." % cfg["project"])
         time.sleep(2)
+    tl = p.GetCurrentTimeline()
+    music = os.path.join(cfg["folder"], "music.mp3")
+    if tl and os.path.exists(music):   # A1 = the music only (projects built before 10.4 had the clips' sound there)
+        a1 = tl.GetItemListInTrack("audio", 1) or []
+        extra = [it for it in a1 if not (it.GetName() or "").startswith("music.")]
+        if extra:
+            tl.DeleteClips(extra, False)
+            say(note="Убрала с A1 звук из видео сцен: %d" % len(extra))
+        if not any((it.GetName() or "").startswith("music.") for it in (tl.GetItemListInTrack("audio", 1) or [])):
+            mpool = p.GetMediaPool()
+            got = [c for c in (mpool.GetRootFolder().GetClipList() or []) if (c.GetName() or "").startswith("music.")] or (mpool.ImportMedia([music]) or [])
+            if got and mpool.AppendToTimeline([{"mediaPoolItem": got[0], "trackIndex": 1, "recordFrame": tl.GetStartFrame(), "mediaType": 2}]):
+                say(note="Поставила музыку на A1")
     pm.SaveProject()
     stop(result={"project": cfg["project"], "video": render(p, cfg["folder"], cfg["outName"])})
 if not r.GetCurrentPage():   # just started: the Project Manager is showing, projects can't be created yet
