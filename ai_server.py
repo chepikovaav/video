@@ -1069,6 +1069,50 @@ PULSE_FRAMES = 12     # end logo «thump» like a cone on a subwoofer: every 0.5
 PULSE_AMOUNT = 0.018  # …up by 1.8 % in two frames, then a quick fall back
 
 
+# FilmConvert Nitrate on the adjustment clip, uncompressed (DaVinci keeps it zstd-packed): the reference
+# settings with the user's corrections from DaVinci — Exposure −0.4 (the reference −1.56 was too dark),
+# Temp 10. Exposure and Temp are set per build from the page settings; the rest stays as it is.
+FILMCONVERT_PAYLOAD = (
+    "0a16082c38104a08085b1a040a0220034a004a004a004a000a0a0848180638224a004a000ace0608321804381440b2e7c69a"
+    "a5314abe06086d10001aea0512e70508d98cbd021223636f6d2e7275626265726d6f6e6b65793a66696c6d636f6e76657274"
+    "6e6974726174651a1b4f6678496d616765456666656374436f6e7465787446696c74657220012a220a1c436f6d7061746962"
+    "696c6974792056657273696f6e204e756d626572120208062a150a084578706f73757265120911000000a09999d9bf2a180a"
+    "0b46696c6d204368726f6d6112091100000040dc114d402a160a0946696c6d204c756d6112091100000060ca9a42402a100a"
+    "0a46696c6d2053746f636b120222002a1d0a10477261696e20486967686c696768747312091125068195438be83f2a210a14"
+    "477261696e204d696420486967686c696768747312091133333333333325402a1e0a11477261696e204d696420536861646f"
+    "7773120911ffffffffffff2c402a1b0a0e477261696e204d6964746f6e65731209110000000000002f402a1a0a0d47726169"
+    "6e20536861646f7773120911ae47e17a14ae01402a1b0a0e477261696e20537472656e677468120911000000e02e0249402a"
+    "1b0a0e496d61676520536f66746e6573731209110000004063ce18402a0c0a044d616b651204220208022a0d0a054d6f6465"
+    "6c1204220208022a350a0f4f534320477261696e20437572766512222a20302e303232317c302e3134357c302e3135357c30"
+    "2e3130367c302e30303736372a1b0a15506c7567696e2056657273696f6e204e756d626572120208042a0f0a0750726f6669"
+    "6c651204220208022a0f0a0950726f66696c654944120208022a280a225265736f6c7665557365416c706861466f72547261"
+    "636b436f6d706f736974696e67120218012a110a0454656d7012091100000000000024402a110a0454696e74120911000000"
+    "00000000002a1c0a0f66696c6d5f6e65757472616c69736512091100000000000000002a1c0a0f66696c6d5f736174757261"
+    "74696f6e120911000000e08a3a5b402a170a1166696c6d5f73746f636b5f656e61626c65120218012a100a0a68616c5f656e"
+    "61626c65120218002249124708d98cbd021223636f6d2e7275626265726d6f6e6b65793a66696c6d636f6e766572746e6974"
+    "726174651a1b4f6678496d616765456666656374436f6e7465787446696c7465724800"
+)
+
+
+def fc_set(data, name, value):
+    """Replace the double value of one FilmConvert parameter in the protobuf payload."""
+    key = b"\x0a" + bytes([len(name)]) + name.encode()
+    i = data.find(key)
+    j = data.find(b"\x11", i + len(key), i + len(key) + 6) if i >= 0 else -1
+    if i < 0 or j < 0:
+        raise CodexError("Не найден параметр FilmConvert " + name)
+    return data[:j + 1] + struct.pack("<d", float(value)) + data[j + 9:]
+
+
+def filmconvert_blob(exposure=None, temp=None):
+    data = bytes.fromhex(FILMCONVERT_PAYLOAD)
+    if exposure is not None:
+        data = fc_set(data, "Exposure", max(-4.0, min(2.0, float(exposure))))
+    if temp is not None:
+        data = fc_set(data, "Temp", max(-100.0, min(100.0, float(temp))))
+    return (struct.pack(">II", 2, len(data) + 1) + b"\x80" + data).hex()  # 0x80: uncompressed payload
+
+
 def page_template():
     with open(os.path.join(ROOT, PAGE), encoding="utf-8") as f:
         m = re.search(r'<script id="template-data" type="application/json">(.*?)</script>', f.read(), re.S)
@@ -1121,7 +1165,8 @@ def drt_fresh(elem):
     return ET.fromstring(s)
 
 
-def build_look_drt(page_drt, *, start, total, end_frames, with_watermark, with_end, wipe_shift=0):
+def build_look_drt(page_drt, *, start, total, end_frames, with_watermark, with_end, wipe_shift=0, exposure=None,
+                   temp=None):
     """Titles .drt from the page + adjustment clip, watermark and end card from the reference timeline."""
     meta, tpl = page_template()
     z = zipfile.ZipFile(io.BytesIO(page_drt))
@@ -1145,6 +1190,7 @@ def build_look_drt(page_drt, *, start, total, end_frames, with_watermark, with_e
     full_end = end_start + end_frames if with_end else start + total
     a = drt_fresh(adj)
     drt_set(a, "Start", start); drt_set(a, "Duration", full_end - start)
+    drt_set(a, "EffectFiltersBA", filmconvert_blob(exposure, temp))
     put(v[1], a)
     if with_end and drt_items(v[2]):
         f = drt_fresh(title_fade)   # ends exactly with the last title
@@ -1184,6 +1230,13 @@ def build_look_drt(page_drt, *, start, total, end_frames, with_watermark, with_e
         for n, b in files.items():
             zo.writestr(n, b)
     return out.getvalue(), drt_kid(wm, "Name").text, drt_kid(logo, "Name").text
+
+
+def film_number(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def mp4_seconds(data):
@@ -1331,6 +1384,11 @@ for k, c in enumerate(cfg["clips"]):   # one by one: a slowed clip must not run 
     got = mp.AppendToTimeline([{"mediaPoolItem": it, "startFrame": 0, "endFrame": src_end, "trackIndex": 1,
                                 "recordFrame": c["record"]}]) or []
     placed += got
+    if got:   # a video of another shape fills the frame (cropped), no black bars
+        try:
+            got[0].SetProperty("Scaling", r.SCALE_FILL)
+        except Exception:
+            pass
     if got and take < need:   # shorter than its title: slow it down to fill the title, no black gap
         item = got[0]
         try:
@@ -1526,7 +1584,9 @@ def davinci_build(fields, files, note):
             clips[-1]["extra"] = min(WIPE_FRAMES // 2, spare)
             wipe_shift = WIPE_FRAMES // 2 - clips[-1]["extra"]
     drt, wm_name, end_name = build_look_drt(by_field["drt"][1], start=start, total=total, end_frames=end_frames,
-                                            with_watermark="watermark" in logos, with_end=with_end, wipe_shift=wipe_shift)
+                                            with_watermark="watermark" in logos, with_end=with_end, wipe_shift=wipe_shift,
+                                            exposure=film_number(fields.get("filmExposure")),
+                                            temp=film_number(fields.get("filmTemp")))
     drt_path = os.path.join(folder, name + ".drt")
     with open(drt_path, "wb") as f:
         f.write(drt)
