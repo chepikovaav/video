@@ -1390,7 +1390,11 @@ def render(p, folder, out_name):
 if cfg.get("mode") == "render":   # render what the user has checked (and maybe changed) in DaVinci
     p = pm.GetCurrentProject()
     if not p or p.GetName() != cfg["project"]:
-        stop(error="Сейчас в DaVinci открыт другой проект. Открой проект «%s» (File → Project Manager) и нажми «Отрендерить» ещё раз." % cfg["project"])
+        say(note="Открываю в DaVinci проект «%s»…" % cfg["project"])
+        p = pm.LoadProject(cfg["project"])
+        if not p:
+            stop(error="DaVinci не открыл проект «%s». Открой его сам (File → Project Manager) и нажми «Отрендерить» ещё раз." % cfg["project"])
+        time.sleep(2)
     pm.SaveProject()
     stop(result={"project": cfg["project"], "video": render(p, cfg["folder"], cfg["outName"])})
 if not r.GetCurrentPage():   # just started: the Project Manager is showing, projects can't be created yet
@@ -1425,7 +1429,7 @@ by_path = {}
 for it in items:
     by_path[it.GetClipProperty("File Path")] = it
 tl_fps = float(cfg["fps"])
-placed, missing, slowed = [], [], []
+placed, missing, slowed, darkened = [], [], [], []
 for k, c in enumerate(cfg["clips"]):   # one by one: a slowed clip must not run into the next one
     it = by_path.get(c["path"])
     if not it:
@@ -1445,8 +1449,12 @@ for k, c in enumerate(cfg["clips"]):   # one by one: a slowed clip must not run 
     src_end = take if c["still"] else min(-(-take * src_fps // tl_fps), int(float(it.GetClipProperty("Frames") or 0)) or 10 ** 9)
     src_end = int(src_end)
     got = mp.AppendToTimeline([{"mediaPoolItem": it, "startFrame": 0, "endFrame": src_end, "trackIndex": 1,
-                                "recordFrame": c["record"]}]) or []
+                                "recordFrame": c["record"], "mediaType": 1}]) or []   # picture only, no clip sound
     placed += got
+    if got and c.get("darken"):   # a bright scene: white point down (a straight curve to ~85 %) so the titles read
+        sl = "%.3f" % float(c["darken"])
+        if got[0].SetCDL({"NodeIndex": 1, "Slope": " ".join([sl] * 3), "Offset": "0 0 0", "Power": "1 1 1", "Saturation": 1.0}):
+            darkened.append(str(k + 1))
     if got:   # a video of another shape fills the frame (cropped), no black bars
         try:
             got[0].SetProperty("Scaling", r.SCALE_FILL)
@@ -1468,7 +1476,8 @@ for k, c in enumerate(cfg["clips"]):   # one by one: a slowed clip must not run 
         slowed.append("сцена %d: %d%%" % (k + 1, round(100.0 * take / need)))
     if got and got[0].GetDuration() != need and not c["still"]:
         say(note="Сцена %d: клип %d кадров вместо %d" % (k + 1, got[0].GetDuration(), need))
-say(note="Видео сцен на таймлайне: %d%s%s" % (len(placed), (", не найдены: " + ", ".join(missing)) if missing else "", (", замедлены до длины титра — " + ", ".join(slowed)) if slowed else ""))
+say(note="Видео сцен на таймлайне: %d%s%s%s" % (len(placed), (", не найдены: " + ", ".join(missing)) if missing else "",
+      (", замедлены до длины титра — " + ", ".join(slowed)) if slowed else "", (", затемнены светлые: сцены " + ", ".join(darkened)) if darkened else ""))
 if cfg.get("endComp"):
     ends = [it for it in (tl.GetItemListInTrack("video", 5) or []) if it.GetMediaPoolItem()]
     if ends:
@@ -1492,7 +1501,10 @@ if cfg.get("endComp"):
                 end.LoadFusionCompByName(names[-1])
 r.OpenPage("edit")
 tl.SetCurrentTimecode(tl.GetStartTimecode())
-if cfg.get("music"):   # the music on A1 from the start; it was generated as long as the ad
+if cfg.get("music"):   # A1 holds only the music, from the start; it was generated as long as the ad
+    old = tl.GetItemListInTrack("audio", 1) or []
+    if old:
+        tl.DeleteClips(old, False)
     got = mp.ImportMedia([cfg["music"]]) or []
     if got:
         if not mp.AppendToTimeline([{"mediaPoolItem": got[0], "trackIndex": 1, "recordFrame": tl.GetStartFrame(), "mediaType": 2}]):
@@ -1501,7 +1513,8 @@ if cfg.get("music"):   # the music on A1 from the start; it was generated as lon
         say(note="DaVinci не открыл файл музыки")
 pm.SaveProject()
 out = render(p, cfg["folder"], cfg["outName"]) if cfg.get("render") else None
-stop(result={"project": name, "timeline": cfg["timeline"], "video": out, "scenes": len(placed), "missing": missing, "slowed": slowed})
+stop(result={"project": name, "timeline": cfg["timeline"], "video": out, "scenes": len(placed), "missing": missing, "slowed": slowed,
+             "darkened": darkened, "music": bool(cfg.get("music"))})
 '''
 
 
@@ -1629,8 +1642,12 @@ def davinci_build(fields, files, note):
         path = os.path.join(folder, "scene-%02d-clip.%s" % (int(c.get("scene") or k + 1), ext))
         with open(path, "wb") as f:
             f.write(part[1])
+        try:
+            darken = max(0.5, min(1.0, float(c.get("darken")))) if c.get("darken") else None
+        except (TypeError, ValueError):
+            darken = None
         clips.append({"path": path, "record": int(c.get("record") or start), "frames": max(1, int(c.get("frames") or 1)),
-                      "still": ext in ("png", "jpg", "jpeg", "webp"), "extra": 0})
+                      "still": ext in ("png", "jpg", "jpeg", "webp"), "extra": 0, "darken": darken})
     if not clips:
         raise CodexError("Нет ни одного видео или картинки сцен.")
     music = by_field.get("music")
