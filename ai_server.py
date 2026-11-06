@@ -1375,11 +1375,26 @@ if not r:
 pm = r.GetProjectManager()
 
 
+# Deliver settings as in the user's own render: one clip, H.264, timeline resolution and frame rate,
+# bit rate restricted to 15000 Kb/s, Main profile, no multi-pass, no network optimization. Hardware
+# acceleration, entropy mode «Auto», automatic key frames and frame reordering are DaVinci's defaults.
+RENDER_LOOK = [("VideoQuality", 15000), ("EncodingProfile", "Main"), ("MultiPassEncode", False),
+               ("NetworkOptimization", False)]
+
+
 def render(p, folder, out_name):
     r.OpenPage("deliver")
     if not p.SetCurrentRenderFormatAndCodec("mp4", "H264"):
         p.SetCurrentRenderFormatAndCodec("mov", "H264")
-    p.SetRenderSettings({"SelectAllFrames": True, "TargetDir": folder, "CustomName": out_name})
+    try:
+        p.SetCurrentRenderMode(1)   # single clip
+    except Exception:
+        pass
+    p.SetRenderSettings({"SelectAllFrames": True, "TargetDir": folder, "CustomName": out_name,
+                         "ExportVideo": True, "ExportAudio": True})
+    skipped = [k for k, v in RENDER_LOOK if not p.SetRenderSettings({k: v})]
+    if skipped:
+        say(note="DaVinci не принял настройки рендера: " + ", ".join(skipped))
     job = p.AddRenderJob()
     if not job or not p.StartRendering([job]):
         stop(error="DaVinci Resolve не начал рендер. Отрендерь проект вручную на вкладке Deliver.")
