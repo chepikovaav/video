@@ -553,7 +553,7 @@ def hf_upload(key, data_url):
     return public
 
 
-def hf_video(key, body):
+def hf_endpoint(body):
     endpoint = str(body.get("endpoint") or "").strip().strip("/")
     if (not HF_ENDPOINT.fullmatch(endpoint) or "video" not in endpoint
             or endpoint.split("/")[0] in ("requests", "files", "estimate")):
@@ -561,6 +561,20 @@ def hf_video(key, body):
     args = body.get("args") or {}
     if not isinstance(args, dict):
         raise HFError(400, "Неверные параметры видео.")
+    return endpoint, args
+
+
+def hf_estimate(key, body):
+    """Current price of one clip from Higgsfield (free, nothing is generated)."""
+    endpoint, args = hf_endpoint(body)
+    args = {**args, "prompt": str(args.get("prompt") or "price check")[:200],
+            "image_url": "https://example.com/frame.jpg"}
+    d = hf_call(key, "POST", "/estimate/" + endpoint, args, timeout=20)
+    return {"usd": d.get("usd")}
+
+
+def hf_video(key, body):
+    endpoint, args = hf_endpoint(body)
     image = str(body.get("image") or "")
     if image.startswith("data:"):
         image = hf_upload(key, image)
@@ -1396,20 +1410,37 @@ if cfg.get("mode") == "render":   # render what the user has checked (and maybe 
             stop(error="DaVinci не открыл проект «%s». Открой его сам (File → Project Manager) и нажми «Отрендерить» ещё раз." % cfg["project"])
         time.sleep(2)
     tl = p.GetCurrentTimeline()
-    music = os.path.join(cfg["folder"], "music.mp3")
+    swapped = []
+    if tl and cfg.get("replace"):
+        v1 = sorted(tl.GetItemListInTrack("video", 1) or [], key=lambda it: it.GetStart())
+        for rp in cfg["replace"]:
+            n = int(rp.get("scene") or 0)
+            mpi = v1[n - 1].GetMediaPoolItem() if 1 <= n <= len(v1) else None
+            if mpi and mpi.ReplaceClip(rp["path"]):
+                swapped.append(str(n))
+            else:
+                say(note="Не удалось заменить видео сцены %d" % n)
+        if swapped:
+            say(note="Заменила в DaVinci видео сцен: " + ", ".join(swapped))
+    music = cfg.get("newMusic") or os.path.join(cfg["folder"], "music.mp3")
+    if tl and cfg.get("newMusic"):
+        for c in (p.GetMediaPool().GetRootFolder().GetClipList() or []):
+            if (c.GetName() or "").startswith("music") and c.ReplaceClip(cfg["newMusic"]):
+                say(note="Заменила музыку")
+                break
     if tl and os.path.exists(music):   # A1 = the music only (projects built before 10.4 had the clips' sound there)
         a1 = tl.GetItemListInTrack("audio", 1) or []
-        extra = [it for it in a1 if not (it.GetName() or "").startswith("music.")]
+        extra = [it for it in a1 if not (it.GetName() or "").startswith("music")]
         if extra:
             tl.DeleteClips(extra, False)
             say(note="Убрала с A1 звук из видео сцен: %d" % len(extra))
-        if not any((it.GetName() or "").startswith("music.") for it in (tl.GetItemListInTrack("audio", 1) or [])):
+        if not any((it.GetName() or "").startswith("music") for it in (tl.GetItemListInTrack("audio", 1) or [])):
             mpool = p.GetMediaPool()
-            got = [c for c in (mpool.GetRootFolder().GetClipList() or []) if (c.GetName() or "").startswith("music.")] or (mpool.ImportMedia([music]) or [])
+            got = [c for c in (mpool.GetRootFolder().GetClipList() or []) if (c.GetName() or "").startswith("music")] or (mpool.ImportMedia([music]) or [])
             if got and mpool.AppendToTimeline([{"mediaPoolItem": got[0], "trackIndex": 1, "recordFrame": tl.GetStartFrame(), "mediaType": 2}]):
                 say(note="Поставила музыку на A1")
     pm.SaveProject()
-    stop(result={"project": cfg["project"], "video": render(p, cfg["folder"], cfg["outName"])})
+    stop(result={"project": cfg["project"], "video": render(p, cfg["folder"], cfg["outName"]), "swapped": swapped})
 if not r.GetCurrentPage():   # just started: the Project Manager is showing, projects can't be created yet
     r.OpenPage("edit"); time.sleep(3)
 name, n = cfg["project"], 2
@@ -1617,8 +1648,30 @@ def davinci_render(fields, files, note):
     root = os.path.realpath(export_root())
     if not project or not folder or not os.path.realpath(folder).startswith(root + os.sep) or not os.path.isdir(folder):
         raise CodexError("Нет собранного проекта — сначала нажми «Собрать в DaVinci».")
-    result = run_resolve({"mode": "render", "project": project, "folder": folder,
-                          "outName": safe_folder_name(fields.get("name"))}, folder, note)
+    replace, new_music = [], ""
+    try:
+        manifest = json.loads(fields.get("manifest") or "{}")
+    except ValueError:
+        manifest = {}
+    by_field = {name: (fname, data) for fname, data, name in files if name}
+    stamp = time.strftime("%H%M%S")
+    for c in manifest.get("changed") or []:
+        part = by_field.get(str(c.get("field")))
+        if not part:
+            continue
+        ext = (os.path.splitext(part[0])[1][1:] or "").lower()
+        if ext not in MEDIA_EXT:
+            ext = image_kind(part[1]) or "mp4"
+        path = os.path.join(folder, "scene-%02d-clip-%s.%s" % (int(c.get("scene") or 0), stamp, ext))
+        with open(path, "wb") as f:
+            f.write(part[1])
+        replace.append({"scene": int(c.get("scene") or 0), "path": path})
+    if "music" in by_field:
+        new_music = os.path.join(folder, "music-%s.mp3" % stamp)
+        with open(new_music, "wb") as f:
+            f.write(by_field["music"][1])
+    result = run_resolve({"mode": "render", "project": project, "folder": folder, "replace": replace,
+                          "newMusic": new_music, "outName": safe_folder_name(fields.get("name"))}, folder, note)
     if result.get("video") and sys.platform == "darwin":
         subprocess.Popen(["open", "-R", result["video"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return dict(result, folder=folder)
@@ -1950,11 +2003,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path.path == "/api/davinci/render" and self.command == "POST":
             if self.client_address[0] not in ("127.0.0.1", "::1") or self.headers.get("Cf-Connecting-Ip"):
                 return self.error(403, "Рендер в DaVinci работает только с AI-сервером на этом компьютере.")
+            ctype = self.headers.get("Content-Type") or ""
             try:
-                fields = {k: str(v) for k, v in json.loads(self.read_body() or b"{}").items()}
+                if ctype.startswith("multipart/form-data"):
+                    fields, files = parse_multipart(ctype, self.read_body())
+                else:
+                    fields, files = {k: str(v) for k, v in json.loads(self.read_body() or b"{}").items()}, []
             except (ValueError, AttributeError):
                 return self.error(400, "Неверный запрос.")
-            return self.reply(202, {"job": start_build_job(fields, [], davinci_render)})
+            return self.reply(202, {"job": start_build_job(fields, files, davinci_render)})
         if path.path == "/api/davinci" and self.command == "POST":
             # Writes into this computer's folders: only for a page on this computer, never through Cloudflare.
             if self.client_address[0] not in ("127.0.0.1", "::1") or self.headers.get("Cf-Connecting-Ip"):
@@ -1986,6 +2043,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             if path == "/api/hf/video" and self.command == "POST":
                 return self.reply(200, hf_video(key, json.loads(self.read_body() or b"{}")))
+            if path == "/api/hf/estimate" and self.command == "POST":
+                return self.reply(200, hf_estimate(key, json.loads(self.read_body() or b"{}")))
             m = re.fullmatch(r"/api/hf/requests/([A-Za-z0-9_-]{6,100})", path)
             if m and self.command == "GET":
                 return self.reply(200, hf_status(key, m.group(1)))
